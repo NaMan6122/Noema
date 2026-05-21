@@ -1,0 +1,59 @@
+---
+title: "Noema — User Flow: Search & Context Generation"
+---
+sequenceDiagram
+    actor User
+    participant UI as Svelte Frontend
+    participant Cmd as Command Router
+    participant QP as Query Parser
+    participant Emb as Embedding Engine
+    participant VS as Vector Search
+    participant BM as BM25 Search
+    participant RRF as RRF Ranker
+    participant DB as SQLite
+    participant LLM as AI Engine
+
+    Note over User,LLM: Search Flow
+
+    User->>UI: Types "budget reports Q1 revenue"
+    UI->>Cmd: search({ text: "...", filters: [] })
+    Cmd->>QP: parse(query_text)
+    QP-->>Cmd: ParsedQuery { semantic, keyword, filters }
+
+    par Parallel Search
+        Cmd->>Emb: embed_query(semantic_text)
+        Emb-->>VS: query_vector [384 dims]
+        VS->>DB: KNN search (top 100)
+        DB-->>VS: vector_results
+    and
+        Cmd->>BM: fts_search(keyword_text)
+        BM->>DB: FTS5 MATCH query
+        DB-->>BM: keyword_results
+    end
+
+    VS-->>RRF: ranked vector hits
+    BM-->>RRF: ranked keyword hits
+    RRF->>RRF: merge + score (k=60)
+    RRF->>DB: fetch file metadata for top 20
+    DB-->>RRF: file entries
+    RRF-->>Cmd: SearchResults[20]
+    Cmd-->>UI: results + snippets + scores
+    UI-->>User: Display ranked results
+
+    Note over User,LLM: Context Generation Flow (on demand)
+
+    User->>UI: Clicks "Generate Context" on a result
+    UI->>Cmd: generate_context(file_id)
+    Cmd->>DB: get file content/chunks
+    DB-->>Cmd: file content
+    Cmd->>LLM: generate(content, prompt)
+
+    Note right of LLM: Runs async in dedicated thread.<br/>User can continue browsing.
+
+    LLM-->>Cmd: AIContext { summary, entities, tags }
+    Cmd->>DB: store context (versioned)
+    Cmd-->>UI: Event::ContextGenerated(file_id)
+    UI-->>User: Show AI summary, entities, suggested tags
+    User->>UI: Edits summary, accepts some tags
+    UI->>Cmd: update_annotation(file_id, edits)
+    Cmd->>DB: update (user_edited = true)

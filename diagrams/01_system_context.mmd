@@ -1,0 +1,28 @@
+---
+title: "Noema — System Context (C4 Level 1)"
+---
+graph TB
+    user[/"👤 User"\]
+
+    subgraph Noema ["Noema Desktop App"]
+        app["Noema\n(Native File Explorer + Semantic Intelligence)"]
+    end
+
+    fs[("Local Filesystem\n(Files, Folders, Volumes)")]
+    os["Operating System\n(macOS / Windows / Linux)\nTrash, Thumbnails, Menus, Drag-Drop"]
+    ollama["Ollama (Optional)\nExternal LLM / Embedding Models"]
+    plugins["WASM Plugins\nCommunity Parsers, Rerankers, UI Extensions"]
+    browser["Browser Extension (v1.1)\nDownload Context Capture"]
+
+    user -->|"Browse, Search, Annotate,\nFile Operations"| app
+    app -->|"Read, Write, Watch"| fs
+    app <-->|"Native APIs:\nTrash, Menus, Dialogs,\nDefault App Registration"| os
+    app -.->|"Optional:\nAlternative Models"| ollama
+    app <-->|"Sandboxed:\nParse, Embed, Rerank"| plugins
+    browser -.->|"Download metadata\n(URL, context)"| app
+
+    style Noema fill:#1a1a2e,stroke:#16213e,color:#fff
+    style app fill:#0f3460,stroke:#533483,color:#fff
+    style fs fill:#1a1a2e,stroke:#e94560,color:#fff
+    style os fill:#1a1a2e,stroke:#533483,color:#fff
+    style user fill:#533483,stroke:#fff,color:#fff

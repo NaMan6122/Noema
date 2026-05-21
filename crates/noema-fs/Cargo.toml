@@ -1,0 +1,19 @@
+[package]
+name = "noema-fs"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+noema-core = { path = "../noema-core" }
+tokio = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
+notify = "7"
+notify-debouncer-full = "0.4"
+trash = "5"
+blake3 = "1"
+globset = "0.4"
+walkdir = "2"

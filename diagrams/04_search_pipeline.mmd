@@ -1,0 +1,67 @@
+---
+title: "Noema — Search Pipeline (Data Flow)"
+---
+flowchart TB
+    input["User Query\n'budget reports from Q1 mentioning revenue targets'"]
+
+    subgraph Parse ["Query Parser"]
+        direction LR
+        extract["Extract\n─────────\nSemantic: 'budget reports mentioning revenue targets'\nFilters: date:2024-01..2024-03\nExact phrases: none"]
+    end
+
+    input --> Parse
+
+    subgraph Parallel ["Parallel Search (tokio::join!)"]
+        direction LR
+
+        subgraph Vec ["Vector Search"]
+            embed_q["Embed Query\n(BGE-small)"]
+            knn["KNN Search\n(sqlite-vec)\nTop 100"]
+            embed_q --> knn
+        end
+
+        subgraph BM25 ["Keyword Search"]
+            tokenize["Tokenize +\nPorter Stem"]
+            fts["FTS5 Query\nTop 100"]
+            tokenize --> fts
+        end
+
+        subgraph Meta ["Metadata Filter"]
+            sql["SQL WHERE\n─────────\ndate range\nfile type\npath scope\ntags"]
+        end
+    end
+
+    Parse --> Vec
+    Parse --> BM25
+    Parse --> Meta
+
+    subgraph Merge ["Result Merge"]
+        rrf["Reciprocal Rank Fusion\n─────────────────────\nscore = Σ 1/(k + rank_i)\nk = 60"]
+        postfilter["Apply Metadata\nFilters"]
+        boost["Boost\n─────────\nMetadata match: 1.2x\nRecent access: 1.1x\nUser feedback: learned"]
+        rrf --> postfilter --> boost
+    end
+
+    Vec --> rrf
+    BM25 --> rrf
+    Meta --> postfilter
+
+    subgraph Present ["Presentation"]
+        snippet["Snippet Extraction\n+ Keyword Highlight"]
+        rank["Final Ranking\nTop 20 results"]
+        snippet --> rank
+    end
+
+    Merge --> Present
+
+    result["Search Results\n─────────────────\n• File entry + metadata\n• Relevance score\n• Highlighted snippet\n• Match type indicator"]
+
+    Present --> result
+
+    style Parse fill:#1a1a2e,stroke:#1f6feb,color:#fff
+    style Parallel fill:#0d1117,stroke:#30363d,color:#fff
+    style Vec fill:#161b22,stroke:#a371f7,color:#fff
+    style BM25 fill:#161b22,stroke:#3fb950,color:#fff
+    style Meta fill:#161b22,stroke:#e94560,color:#fff
+    style Merge fill:#1a1a2e,stroke:#f0883e,color:#fff
+    style Present fill:#1a1a2e,stroke:#1f6feb,color:#fff

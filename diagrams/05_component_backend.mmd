@@ -1,0 +1,95 @@
+---
+title: "Noema — Component Diagram (C4 Level 3 - Backend)"
+---
+graph TB
+    subgraph Backend ["Rust Backend Components"]
+        direction TB
+
+        subgraph Commands ["Command Layer (Tauri IPC)"]
+            fs_cmd["FileSystem Commands\nlist_dir, copy, move,\nrename, delete, undo"]
+            search_cmd["Search Commands\nsearch, suggest,\nget_similar, get_duplicates"]
+            ai_cmd["AI Commands\nget_context, generate_context,\nupdate_annotation"]
+            index_cmd["Index Commands\nget_status, add_watch,\npause, resume"]
+            workspace_cmd["Workspace Commands\nsave, load, switch, list"]
+        end
+
+        subgraph Core ["Core Services"]
+            direction LR
+
+            subgraph FileEngine ["File Engine"]
+                ops["FileOpsEngine\n─────────\n• copy/move/rename/delete\n• undo/redo stack (50 deep)\n• progress tracking\n• conflict resolution"]
+                watcher["WatcherService\n─────────\n• notify backend\n• 500ms debounce\n• .noemaignore support\n• volume mount detection"]
+                thumbs["ThumbnailService\n─────────\n• async generation\n• LRU cache (500MB)\n• priority queue\n• WebP output"]
+            end
+
+            subgraph SearchEngine ["Search Engine"]
+                parser["QueryParser\n─────────\n• Structured syntax\n• Filter extraction\n• Intent detection"]
+                vector["VectorSearch\n─────────\n• sqlite-vec KNN\n• Query embedding\n• Top-K retrieval"]
+                bm25["BM25Search\n─────────\n• FTS5 queries\n• Porter stemming\n• Phrase matching"]
+                ranker["RRFRanker\n─────────\n• Rank fusion (k=60)\n• Metadata boost\n• Feedback learning"]
+            end
+
+            subgraph AIEngine ["AI Engine"]
+                embedder["EmbeddingEngine\n─────────\n• ONNX Runtime (ort)\n• BGE-small-en-v1.5\n• Batch embed (32)\n• Lazy load/unload"]
+                llm["LLMEngine\n─────────\n• llama-cpp-rs\n• GGUF models\n• Context generation\n• Entity extraction"]
+                suggest["SuggestionEngine\n─────────\n• Smart rename\n• Tag suggestions\n• Filing suggestions"]
+            end
+
+            subgraph IndexEngine ["Indexer"]
+                queue["IndexQueue\n─────────\n• Lock-free (crossbeam)\n• Priority scheduling\n• Dedup by path"]
+                parsers["ParserRegistry\n─────────\n• PDF (lopdf)\n• DOCX (docx-rs)\n• XLSX (calamine)\n• Code (tree-sitter)\n• Markdown (pulldown-cmark)\n• Fallback (raw text)"]
+                chunker["SemanticChunker\n─────────\n• Structure-aware\n• 256-768 tokens\n• 64-token overlap\n• Atomic code blocks"]
+            end
+        end
+
+        subgraph Infra ["Infrastructure"]
+            direction LR
+            eventbus["EventBus\n(tokio::broadcast)"]
+            throttle["ThrottleController\n─────────\n• CPU monitoring\n• Battery awareness\n• User activity detection\n• Adaptive batch sizing"]
+            pluginhost["PluginHost\n(wasmtime)\n─────────\n• Sandboxed execution\n• Capability-based perms\n• Hot reload"]
+            workspace["WorkspaceManager\n─────────\n• Save/restore state\n• Tab layouts\n• Sidebar config"]
+            automation["AutomationEngine\n─────────\n• Rule matching\n• Event triggers\n• Lua/WASM scripts"]
+        end
+
+        subgraph Storage ["Storage"]
+            db["StorageEngine\n─────────\n• rusqlite (WAL mode)\n• sqlite-vec\n• FTS5\n• Connection pool"]
+        end
+    end
+
+    fs_cmd --> ops
+    fs_cmd --> watcher
+    search_cmd --> parser
+    ai_cmd --> llm
+    ai_cmd --> suggest
+    index_cmd --> queue
+    workspace_cmd --> workspace
+
+    ops --> eventbus
+    watcher --> queue
+    queue --> parsers
+    parsers --> chunker
+    chunker --> embedder
+    embedder --> db
+    parser --> vector
+    parser --> bm25
+    vector --> ranker
+    bm25 --> ranker
+    vector --> db
+    bm25 --> db
+    llm --> db
+    ops --> db
+    thumbs --> eventbus
+    throttle --> queue
+    throttle --> llm
+    automation --> ops
+    eventbus -.-> pluginhost
+
+    style Backend fill:#0d1117,stroke:#30363d,color:#fff
+    style Commands fill:#161b22,stroke:#1f6feb,color:#fff
+    style Core fill:#161b22,stroke:#238636,color:#fff
+    style FileEngine fill:#1c2128,stroke:#3fb950,color:#fff
+    style SearchEngine fill:#1c2128,stroke:#a371f7,color:#fff
+    style AIEngine fill:#1c2128,stroke:#f0883e,color:#fff
+    style IndexEngine fill:#1c2128,stroke:#e94560,color:#fff
+    style Infra fill:#161b22,stroke:#768390,color:#fff
+    style Storage fill:#161b22,stroke:#e94560,color:#fff

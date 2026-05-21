@@ -1,0 +1,16 @@
+[package]
+name = "noema-index"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+noema-core = { path = "../noema-core" }
+tokio = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+chrono = { workspace = true }
+crossbeam-queue = "0.3"
+blake3 = "1"
+infer = "0.16"
+pulldown-cmark = "0.12"

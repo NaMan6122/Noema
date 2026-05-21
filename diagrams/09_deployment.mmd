@@ -1,0 +1,45 @@
+---
+title: "Noema — Deployment & Platform Architecture"
+---
+graph TB
+    subgraph Build ["Build Pipeline (GitHub Actions)"]
+        src["Rust Source\n+ Svelte Frontend"]
+        cargo["cargo build --release"]
+        bundle["Tauri Bundle"]
+        src --> cargo --> bundle
+    end
+
+    subgraph Artifacts ["Platform Artifacts"]
+        direction LR
+        mac["macOS\n─────────\n• .dmg installer\n• Homebrew cask\n• Universal binary\n  (x86_64 + aarch64)\n• Notarized + Stapled"]
+        win["Windows\n─────────\n• .msi installer\n• WinGet manifest\n• Scoop bucket\n• Code-signed"]
+        linux["Linux\n─────────\n• AppImage\n• .deb (Ubuntu/Debian)\n• .rpm (Fedora/RHEL)\n• Flatpak\n• AUR PKGBUILD"]
+    end
+
+    bundle --> mac
+    bundle --> win
+    bundle --> linux
+
+    subgraph Runtime ["Runtime Layout (per platform)"]
+        direction TB
+        binary["noema binary (~50MB)"]
+        resources["Resources/\n─────────\n• Svelte bundle\n• Icons\n• Default config"]
+        models_dir["Models/ (downloaded on first launch)\n─────────\n• bge-small-en-v1.5.onnx (~130MB)\n• Optional: LLM GGUF (user-provided)"]
+        data["User Data\n─────────\n• ~/.noema/index.db (macOS/Linux)\n• %APPDATA%\\Noema\\index.db (Windows)\n• Per-volume indexes\n• Thumbnail cache\n• Plugin directory"]
+    end
+
+    mac --> Runtime
+    win --> Runtime
+    linux --> Runtime
+
+    subgraph OSIntegration ["OS Integration Points"]
+        direction LR
+        mac_os["macOS\n─────────\n• LSHandlerURLScheme (file://)\n• NSFileManager (Trash)\n• QLThumbnailGenerator\n• NSMenu (native menus)\n• Dock registration"]
+        win_os["Windows\n─────────\n• Registry (context menu)\n• IFileOperation (Recycle Bin)\n• Shell namespace (v2)\n• Jump Lists\n• Toast notifications"]
+        linux_os["Linux\n─────────\n• xdg-mime (default app)\n• D-Bus FileManager1\n• Freedesktop Trash spec\n• Freedesktop thumbnails\n• .desktop file"]
+    end
+
+    style Build fill:#161b22,stroke:#238636,color:#fff
+    style Artifacts fill:#0d1117,stroke:#1f6feb,color:#fff
+    style Runtime fill:#161b22,stroke:#a371f7,color:#fff
+    style OSIntegration fill:#161b22,stroke:#e94560,color:#fff

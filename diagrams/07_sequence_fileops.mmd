@@ -1,0 +1,56 @@
+---
+title: "Noema — User Flow: File Operation + Index Sync"
+---
+sequenceDiagram
+    actor User
+    participant UI as Svelte Frontend
+    participant Cmd as Command Router
+    participant FOps as File Ops Engine
+    participant FS as Filesystem
+    participant EB as Event Bus
+    participant Idx as Indexer
+    participant DB as SQLite
+
+    Note over User,DB: File Move via Explorer
+
+    User->>UI: Drags file.pdf from /docs to /archive
+    UI->>Cmd: move_files(["/docs/file.pdf"], "/archive/")
+    Cmd->>FOps: move(sources, dest)
+
+    FOps->>FOps: Push to undo stack
+    FOps->>FS: std::fs::rename (same volume) or copy+delete
+    FS-->>FOps: success
+    FOps->>EB: FileChanged { path: "/archive/file.pdf", type: Moved }
+    FOps-->>Cmd: OperationId
+    Cmd-->>UI: Event::OperationComplete
+
+    EB->>Idx: FileChanged event received
+    Idx->>DB: UPDATE files SET path = '/archive/file.pdf' WHERE content_hash = 'abc...'
+
+    Note right of DB: Annotations, tags, AI context,<br/>embeddings all preserved.<br/>Only path updated.
+
+    DB-->>Idx: updated
+    Idx->>EB: IndexUpdated { file_id }
+    EB-->>UI: Refresh views
+
+    Note over User,DB: Undo
+
+    User->>UI: Cmd+Z (Undo)
+    UI->>Cmd: undo()
+    Cmd->>FOps: undo()
+    FOps->>FOps: Pop undo stack → Move { from: /archive/file.pdf, to: /docs/file.pdf }
+    FOps->>FS: rename back
+    FS-->>FOps: success
+    FOps->>EB: FileChanged { type: Moved }
+    EB->>Idx: Update path back in DB
+
+    Note over User,DB: External Change (detected by watcher)
+
+    Note left of FS: User renames file via Terminal
+    FS->>EB: notify event: Remove "/docs/old.pdf" + Create "/docs/new.pdf"
+    EB->>Idx: Debounced (500ms)
+    Idx->>DB: Lookup by content_hash
+    Idx->>Idx: Hash match → same file, just renamed
+    Idx->>DB: UPDATE path, filename
+    Idx->>EB: IndexUpdated
+    EB-->>UI: Refresh current view

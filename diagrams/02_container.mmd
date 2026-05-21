@@ -1,0 +1,66 @@
+---
+title: "Noema — Container Diagram (C4 Level 2)"
+---
+graph TB
+    subgraph Desktop ["Noema Desktop Application"]
+        direction TB
+
+        subgraph UI ["UI Layer (Tauri WebView)"]
+            svelte["Svelte Frontend\n─────────────────\nFile Browser Views\nSearch Interface\nPreview Pane\nAnnotation Panel\nGraph View\nCollection Boards\nWorkspace Manager"]
+        end
+
+        subgraph Backend ["Rust Backend (tokio async runtime)"]
+            direction LR
+            cmd["Command Router\n(Tauri IPC)"]
+
+            subgraph Explorer ["Explorer Engine"]
+                fileops["File Operations\n(Copy, Move, Rename,\nDelete, Undo/Redo)"]
+                watcher["File Watcher\n(notify crate)"]
+                thumbs["Thumbnail\nGenerator"]
+            end
+
+            subgraph Intelligence ["Intelligence Engine"]
+                indexer["Indexer Pipeline\n(Parse → Chunk → Embed)"]
+                search["Search Engine\n(BM25 + Vector + RRF)"]
+                ai["AI Engine\n(LLM Context Gen)"]
+                automation["Automation Engine\n(Rules, Hooks)"]
+            end
+
+            subgraph Infra ["Infrastructure"]
+                events["Event Bus\n(tokio broadcast)"]
+                plugins["Plugin Host\n(wasmtime)"]
+                throttle["Throttle Controller\n(CPU/Battery aware)"]
+            end
+        end
+
+        subgraph Storage ["Storage Layer"]
+            direction LR
+            sqlite["SQLite\n(FTS5 + sqlite-vec)\n─────────────────\nFiles, Chunks,\nAnnotations, Tags,\nRelationships,\nUndo Stack"]
+            thumbcache["Thumbnail Cache\n(LRU, WebP)"]
+            models["ML Models\n─────────────\nBGE-small (ONNX)\nLLM (GGUF)"]
+            config["Config\n(TOML)"]
+        end
+    end
+
+    svelte <-->|"IPC Commands\n+ Events"| cmd
+    cmd --> Explorer
+    cmd --> Intelligence
+    Explorer --> events
+    Intelligence --> events
+    events --> svelte
+    indexer --> sqlite
+    search --> sqlite
+    fileops --> sqlite
+    thumbs --> thumbcache
+    ai --> models
+    indexer --> models
+    throttle --> indexer
+    throttle --> ai
+
+    style Desktop fill:#0d1117,stroke:#30363d,color:#fff
+    style UI fill:#161b22,stroke:#1f6feb,color:#fff
+    style Backend fill:#161b22,stroke:#238636,color:#fff
+    style Storage fill:#161b22,stroke:#e94560,color:#fff
+    style Explorer fill:#1c2128,stroke:#3fb950,color:#fff
+    style Intelligence fill:#1c2128,stroke:#a371f7,color:#fff
+    style Infra fill:#1c2128,stroke:#768390,color:#fff

@@ -1,0 +1,38 @@
+---
+title: "Noema — Indexing Pipeline (Data Flow)"
+---
+flowchart LR
+    subgraph Trigger ["Trigger Sources"]
+        watch["File Watcher\n(notify)"]
+        inapp["In-App File Op\n(move/rename/create)"]
+        manual["Manual Re-index\n(user request)"]
+    end
+
+    subgraph Pipeline ["Indexer Pipeline"]
+        direction LR
+        filter["Filter\n─────────\n• Check ignore rules\n• Check max file size\n• Check if already indexed\n  (hash match)"]
+        parse["Parse\n─────────\n• Select parser by ext/mime\n• Extract text + structure\n• Extract metadata\n• Fallback: raw text / OCR"]
+        chunk["Chunk\n─────────\n• Structure-aware split\n• Respect headings/code blocks\n• Target 256-768 tokens\n• Add 64-token overlap"]
+        embed["Embed\n─────────\n• Batch (32 chunks)\n• BGE-small via ONNX\n• 384-dim vectors\n• Query prefix for asymmetric"]
+        store["Store\n─────────\n• Upsert file record\n• Insert chunks\n• Insert embeddings\n  (sqlite-vec)\n• Update FTS5 index"]
+    end
+
+    subgraph Post ["Post-Processing (Async)"]
+        context["AI Context\n(if enabled)\n─────────\n• Generate summary\n• Extract entities\n• Suggest tags"]
+        relations["Relationship\nDetection\n─────────\n• Near-duplicates\n• Semantic neighbors\n• Shared entities"]
+    end
+
+    watch --> filter
+    inapp --> filter
+    manual --> filter
+    filter -->|"passes"| parse
+    filter -->|"skip"| skip[/"Skip (already indexed)"\]
+    parse --> chunk
+    chunk --> embed
+    embed --> store
+    store --> context
+    store --> relations
+
+    style Trigger fill:#1a1a2e,stroke:#e94560,color:#fff
+    style Pipeline fill:#0f3460,stroke:#1f6feb,color:#fff
+    style Post fill:#1a1a2e,stroke:#a371f7,color:#fff

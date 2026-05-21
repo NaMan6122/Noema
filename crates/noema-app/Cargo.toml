@@ -1,0 +1,20 @@
+[package]
+name = "noema-app"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "noema"
+path = "src/main.rs"
+
+[dependencies]
+noema-core = { path = "../noema-core" }
+noema-fs = { path = "../noema-fs" }
+noema-index = { path = "../noema-index" }
+noema-search = { path = "../noema-search" }
+noema-ai = { path = "../noema-ai" }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = "0.3"
