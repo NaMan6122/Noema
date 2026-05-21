@@ -82,6 +82,93 @@ async fn get_home_dir() -> Result<String, String> {
         .ok_or_else(|| "Cannot determine home directory".to_string())
 }
 
+#[tauri::command]
+async fn copy_files(
+    sources: Vec<String>,
+    dest: String,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    let sources: Vec<PathBuf> = sources.into_iter().map(PathBuf::from).collect();
+    let op_id = state
+        .fs_engine
+        .copy_files(sources, PathBuf::from(dest))
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(op_id.0.to_string())
+}
+
+#[tauri::command]
+async fn move_files(
+    sources: Vec<String>,
+    dest: String,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    let sources: Vec<PathBuf> = sources.into_iter().map(PathBuf::from).collect();
+    let op_id = state
+        .fs_engine
+        .move_files(sources, PathBuf::from(dest))
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(op_id.0.to_string())
+}
+
+#[tauri::command]
+async fn delete_files(
+    paths: Vec<String>,
+    use_trash: Option<bool>,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    let paths: Vec<PathBuf> = paths.into_iter().map(PathBuf::from).collect();
+    let op_id = state
+        .fs_engine
+        .delete_files(paths, use_trash.unwrap_or(true))
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(op_id.0.to_string())
+}
+
+#[tauri::command]
+async fn rename_file(
+    path: String,
+    new_name: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    state
+        .fs_engine
+        .rename_file(PathBuf::from(path), new_name)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn create_directory(
+    path: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    state
+        .fs_engine
+        .create_directory(PathBuf::from(path))
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn create_file(
+    path: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    state
+        .fs_engine
+        .create_file(PathBuf::from(path))
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn undo(state: State<'_, AppState>) -> Result<(), String> {
+    state.fs_engine.undo().await.map_err(|e| e.to_string())
+}
+
 fn main() {
     tracing_subscriber::fmt::init();
 
@@ -106,6 +193,13 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             list_directory,
             get_home_dir,
+            copy_files,
+            move_files,
+            delete_files,
+            rename_file,
+            create_directory,
+            create_file,
+            undo,
         ])
         .run(tauri::generate_context!())
         .expect("error running Noema");

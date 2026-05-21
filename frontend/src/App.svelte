@@ -24,6 +24,17 @@
   let loading = false;
   let error = '';
 
+  // Selection
+  let selectedPaths: Set<string> = new Set();
+  let lastSelectedIndex = -1;
+
+  // Context menu
+  let contextMenu = { visible: false, x: 0, y: 0 };
+
+  // Inline rename
+  let renamingPath = '';
+  let renameValue = '';
+
   onMount(async () => {
     const home = await invoke<string>('get_home_dir');
     await navigateTo(home);
@@ -44,6 +55,7 @@
         historyIndex = pathHistory.length - 1;
       }
       currentPath = path;
+      selectedPaths = new Set();
     } catch (e) {
       error = String(e);
     }
@@ -58,22 +70,131 @@
   function goBack() {
     if (historyIndex > 0) {
       historyIndex--;
-      currentPath = pathHistory[historyIndex];
-      navigateTo(currentPath);
+      navigateTo(pathHistory[historyIndex]);
     }
   }
 
   function goForward() {
     if (historyIndex < pathHistory.length - 1) {
       historyIndex++;
-      currentPath = pathHistory[historyIndex];
-      navigateTo(currentPath);
+      navigateTo(pathHistory[historyIndex]);
     }
   }
 
   function openEntry(entry: FileEntry) {
     if (entry.is_dir) {
       navigateTo(entry.path);
+    }
+  }
+
+  function selectEntry(entry: FileEntry, index: number, event: MouseEvent) {
+    if (event.metaKey || event.ctrlKey) {
+      const next = new Set(selectedPaths);
+      if (next.has(entry.path)) {
+        next.delete(entry.path);
+      } else {
+        next.add(entry.path);
+      }
+      selectedPaths = next;
+    } else if (event.shiftKey && lastSelectedIndex >= 0) {
+      const start = Math.min(lastSelectedIndex, index);
+      const end = Math.max(lastSelectedIndex, index);
+      const next = new Set(selectedPaths);
+      for (let i = start; i <= end; i++) {
+        next.add(entries[i].path);
+      }
+      selectedPaths = next;
+    } else {
+      selectedPaths = new Set([entry.path]);
+    }
+    lastSelectedIndex = index;
+  }
+
+  function selectAll() {
+    selectedPaths = new Set(entries.map(e => e.path));
+  }
+
+  // Context menu
+  function showContextMenu(event: MouseEvent, entry?: FileEntry) {
+    event.preventDefault();
+    if (entry && !selectedPaths.has(entry.path)) {
+      selectedPaths = new Set([entry.path]);
+    }
+    contextMenu = { visible: true, x: event.clientX, y: event.clientY };
+  }
+
+  function hideContextMenu() {
+    contextMenu = { visible: false, x: 0, y: 0 };
+  }
+
+  // File operations
+  async function handleDelete() {
+    hideContextMenu();
+    if (selectedPaths.size === 0) return;
+    try {
+      await invoke('delete_files', { paths: [...selectedPaths], useTrash: true });
+      await navigateTo(currentPath);
+    } catch (e) {
+      error = String(e);
+    }
+  }
+
+  function startRename() {
+    hideContextMenu();
+    if (selectedPaths.size !== 1) return;
+    const path = [...selectedPaths][0];
+    const entry = entries.find(e => e.path === path);
+    if (entry) {
+      renamingPath = path;
+      renameValue = entry.filename;
+    }
+  }
+
+  async function commitRename() {
+    if (!renamingPath || !renameValue) {
+      renamingPath = '';
+      return;
+    }
+    try {
+      await invoke('rename_file', { path: renamingPath, newName: renameValue });
+      renamingPath = '';
+      await navigateTo(currentPath);
+    } catch (e) {
+      error = String(e);
+      renamingPath = '';
+    }
+  }
+
+  async function handleNewFolder() {
+    hideContextMenu();
+    const name = 'New Folder';
+    const path = `${currentPath}/${name}`;
+    try {
+      await invoke('create_directory', { path });
+      await navigateTo(currentPath);
+    } catch (e) {
+      error = String(e);
+    }
+  }
+
+  async function handleNewFile() {
+    hideContextMenu();
+    const name = 'untitled';
+    const path = `${currentPath}/${name}`;
+    try {
+      await invoke('create_file', { path });
+      await navigateTo(currentPath);
+    } catch (e) {
+      error = String(e);
+    }
+  }
+
+  async function handleUndo() {
+    try {
+      await invoke('undo');
+      await navigateTo(currentPath);
+    } catch (e) {
+      error = String(e);
     }
   }
 
@@ -121,13 +242,22 @@
   }
 
   function handleKeydown(e: KeyboardEvent) {
+    if (renamingPath) return;
     if (e.key === 'Backspace' && !e.metaKey) {
       goUp();
+    } else if (e.key === 'a' && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault();
+      selectAll();
+    } else if (e.key === 'z' && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault();
+      handleUndo();
+    } else if (e.key === 'Delete' || (e.key === 'Backspace' && e.metaKey)) {
+      handleDelete();
     }
   }
 </script>
 
-<svelte:window on:keydown={handleKeydown} />
+<svelte:window on:keydown={handleKeydown} on:click={hideContextMenu} />
 
 <div class="app">
   <header class="toolbar">
@@ -155,7 +285,7 @@
     <div class="error">{error}</div>
   {/if}
 
-  <div class="file-list">
+  <div class="file-list" on:contextmenu={(e) => showContextMenu(e)}>
     <div class="list-header">
       <div class="col-icon"></div>
       <div class="col-name" on:click={() => toggleSort('name')}>
@@ -172,16 +302,32 @@
     {#if loading}
       <div class="loading">Loading...</div>
     {:else}
-      {#each entries as entry}
+      {#each entries as entry, i}
         <div
           class="list-row"
           class:is-dir={entry.is_dir}
+          class:selected={selectedPaths.has(entry.path)}
+          on:click={(e) => selectEntry(entry, i, e)}
           on:dblclick={() => openEntry(entry)}
+          on:contextmenu|stopPropagation={(e) => showContextMenu(e, entry)}
           tabindex="0"
           on:keydown={(e) => { if (e.key === 'Enter') openEntry(entry); }}
         >
           <div class="col-icon">{getIcon(entry)}</div>
-          <div class="col-name">{entry.filename}</div>
+          <div class="col-name">
+            {#if renamingPath === entry.path}
+              <input
+                class="rename-input"
+                type="text"
+                bind:value={renameValue}
+                on:blur={commitRename}
+                on:keydown={(e) => { if (e.key === 'Enter') commitRename(); if (e.key === 'Escape') { renamingPath = ''; } }}
+                autofocus
+              />
+            {:else}
+              {entry.filename}
+            {/if}
+          </div>
           <div class="col-size">{entry.is_dir ? '—' : formatSize(entry.size)}</div>
           <div class="col-modified">{formatDate(entry.modified)}</div>
         </div>
@@ -192,8 +338,20 @@
     {/if}
   </div>
 
+  {#if contextMenu.visible}
+    <div class="context-menu" style="left: {contextMenu.x}px; top: {contextMenu.y}px;">
+      {#if selectedPaths.size > 0}
+        <button on:click={startRename} disabled={selectedPaths.size !== 1}>Rename</button>
+        <button on:click={handleDelete}>Move to Trash</button>
+        <hr />
+      {/if}
+      <button on:click={handleNewFolder}>New Folder</button>
+      <button on:click={handleNewFile}>New File</button>
+    </div>
+  {/if}
+
   <footer class="status-bar">
-    <span>{entries.length} items</span>
+    <span>{selectedPaths.size > 0 ? `${selectedPaths.size} selected` : `${entries.length} items`}</span>
     <span>{currentPath}</span>
   </footer>
 </div>
@@ -323,8 +481,11 @@
   }
 
   .list-row:focus {
-    background: #45475a;
     outline: none;
+  }
+
+  .list-row.selected {
+    background: #45475a;
   }
 
   .list-row.is-dir .col-name {
@@ -363,5 +524,54 @@
     border-top: 1px solid #313244;
     color: #6c7086;
     font-size: 11px;
+  }
+
+  .rename-input {
+    width: 100%;
+    padding: 1px 4px;
+    border: 1px solid #89b4fa;
+    border-radius: 3px;
+    background: #1e1e2e;
+    color: #cdd6f4;
+    font-size: 13px;
+    outline: none;
+  }
+
+  .context-menu {
+    position: fixed;
+    background: #313244;
+    border: 1px solid #45475a;
+    border-radius: 6px;
+    padding: 4px 0;
+    min-width: 160px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    z-index: 1000;
+  }
+
+  .context-menu button {
+    display: block;
+    width: 100%;
+    padding: 6px 14px;
+    border: none;
+    background: none;
+    color: #cdd6f4;
+    font-size: 13px;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .context-menu button:hover:not(:disabled) {
+    background: #45475a;
+  }
+
+  .context-menu button:disabled {
+    color: #6c7086;
+    cursor: default;
+  }
+
+  .context-menu hr {
+    border: none;
+    border-top: 1px solid #45475a;
+    margin: 4px 0;
   }
 </style>
