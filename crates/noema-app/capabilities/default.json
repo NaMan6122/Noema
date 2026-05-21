@@ -1,0 +1,8 @@
+{
+  "identifier": "com.noema.app",
+  "description": "Semantic File Explorer",
+  "windows": ["main"],
+  "permissions": [
+    "core:default"
+  ]
+}
