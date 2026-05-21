@@ -1,6 +1,8 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
+  import { listen } from '@tauri-apps/api/event';
   import { onMount } from 'svelte';
+  import ProgressToast from './lib/ProgressToast.svelte';
 
   interface FileEntry {
     path: string;
@@ -35,9 +37,16 @@
   let renamingPath = '';
   let renameValue = '';
 
+  // Drag-drop
+  let dragOverPath = '';
+
   onMount(async () => {
     const home = await invoke<string>('get_home_dir');
     await navigateTo(home);
+
+    listen('fs:changed', () => {
+      navigateTo(currentPath);
+    });
   });
 
   async function navigateTo(path: string) {
@@ -198,6 +207,46 @@
     }
   }
 
+  function handleDragStart(event: DragEvent, entry: FileEntry) {
+    if (!event.dataTransfer) return;
+    const paths = selectedPaths.has(entry.path) ? [...selectedPaths] : [entry.path];
+    event.dataTransfer.setData('application/json', JSON.stringify(paths));
+    event.dataTransfer.effectAllowed = 'copyMove';
+  }
+
+  function handleDragOver(event: DragEvent, entry: FileEntry) {
+    if (!entry.is_dir) return;
+    event.preventDefault();
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = event.altKey ? 'copy' : 'move';
+    }
+    dragOverPath = entry.path;
+  }
+
+  function handleDragLeave() {
+    dragOverPath = '';
+  }
+
+  async function handleDrop(event: DragEvent, entry: FileEntry) {
+    event.preventDefault();
+    dragOverPath = '';
+    if (!entry.is_dir || !event.dataTransfer) return;
+
+    const raw = event.dataTransfer.getData('application/json');
+    if (!raw) return;
+    const sources: string[] = JSON.parse(raw);
+
+    try {
+      if (event.altKey) {
+        await invoke('copy_files', { sources, dest: entry.path });
+      } else {
+        await invoke('move_files', { sources, dest: entry.path });
+      }
+    } catch (e) {
+      error = String(e);
+    }
+  }
+
   function toggleSort(field: string) {
     if (sortField === field) {
       sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
@@ -307,6 +356,12 @@
           class="list-row"
           class:is-dir={entry.is_dir}
           class:selected={selectedPaths.has(entry.path)}
+          class:drag-over={dragOverPath === entry.path}
+          draggable="true"
+          on:dragstart={(e) => handleDragStart(e, entry)}
+          on:dragover={(e) => handleDragOver(e, entry)}
+          on:dragleave={handleDragLeave}
+          on:drop={(e) => handleDrop(e, entry)}
           on:click={(e) => selectEntry(entry, i, e)}
           on:dblclick={() => openEntry(entry)}
           on:contextmenu|stopPropagation={(e) => showContextMenu(e, entry)}
@@ -354,6 +409,8 @@
     <span>{selectedPaths.size > 0 ? `${selectedPaths.size} selected` : `${entries.length} items`}</span>
     <span>{currentPath}</span>
   </footer>
+
+  <ProgressToast />
 </div>
 
 <style>
@@ -486,6 +543,12 @@
 
   .list-row.selected {
     background: #45475a;
+  }
+
+  .list-row.drag-over {
+    background: #89b4fa20;
+    outline: 1px dashed #89b4fa;
+    outline-offset: -1px;
   }
 
   .list-row.is-dir .col-name {
