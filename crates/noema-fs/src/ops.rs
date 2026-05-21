@@ -5,7 +5,7 @@ use std::sync::Arc;
 use chrono::{DateTime, Utc};
 use noema_core::error::{NoemaError, Result};
 use noema_core::events::{AppEvent, ChangeType, EventBus, OpType};
-use noema_core::types::{FileEntry, FileId, OperationId, SortDirection, SortField, SortOrder};
+use noema_core::types::{FileEntry, OperationId, SortDirection, SortField, SortOrder};
 use tokio::sync::Mutex;
 
 pub struct FileOpsEngine {
