@@ -18,3 +18,9 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = "0.3"
+tauri = { version = "2", features = [] }
+tauri-build = { version = "2", features = [] }
+dirs = "6"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
