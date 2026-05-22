@@ -66,6 +66,17 @@
   // Global search
   let globalSearchVisible = false;
 
+  // Disk space
+  let diskInfo: { total: number; available: number; used: number } | null = null;
+
+  function formatSize(bytes: number): string {
+    if (bytes >= 1e12) return (bytes / 1e12).toFixed(1) + ' TB';
+    if (bytes >= 1e9) return (bytes / 1e9).toFixed(1) + ' GB';
+    if (bytes >= 1e6) return (bytes / 1e6).toFixed(1) + ' MB';
+    if (bytes >= 1e3) return (bytes / 1e3).toFixed(1) + ' KB';
+    return bytes + ' B';
+  }
+
   // Theme
   let theme: 'dark' | 'light' | 'auto' = 'auto';
   function cycleTheme() {
@@ -93,6 +104,7 @@
     { id: 'undo', label: 'Undo', shortcut: 'Cmd+Z', action: handleUndo },
     { id: 'redo', label: 'Redo', shortcut: 'Cmd+Shift+Z', action: handleRedo },
     { id: 'theme', label: `Theme: ${theme} → cycle`, action: cycleTheme },
+    { id: 'terminal', label: 'Open in Terminal', action: () => invoke('open_in_terminal', { path: currentPath }) },
   ];
 
   async function dirs(name: string) {
@@ -228,6 +240,7 @@
       error = String(e);
     }
     loading = false;
+    invoke<{ total: number; available: number; used: number }>('get_disk_space', { path }).then(info => { diskInfo = info; }).catch(() => {});
   }
 
   function navigateTo(path: string) {
@@ -679,11 +692,14 @@
       {/if}
       <button on:click={handleNewFolder}>New Folder</button>
       <button on:click={handleNewFile}>New File</button>
+      <hr />
+      <button on:click={() => { invoke('open_in_terminal', { path: currentPath }); closeContextMenu(); }}>Open in Terminal</button>
     </div>
   {/if}
 
   <footer class="status-bar">
     <span>{selectedPaths.size > 0 ? `${selectedPaths.size} selected` : `${entries.length} items`}</span>
+    <span>{diskInfo ? `${formatSize(diskInfo.available)} free of ${formatSize(diskInfo.total)}` : ''}</span>
     <span>{currentPath}</span>
   </footer>
 

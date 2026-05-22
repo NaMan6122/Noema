@@ -24,6 +24,7 @@ dirs = "6"
 chrono = { workspace = true }
 rusqlite = { version = "0.32", features = ["bundled"] }
 walkdir = "2"
+fs2 = "0.4"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

@@ -263,6 +263,72 @@ async fn get_recent_files(
 }
 
 #[tauri::command]
+async fn open_in_terminal(path: String) -> Result<(), String> {
+    let dir = if std::path::Path::new(&path).is_dir() {
+        path
+    } else {
+        std::path::Path::new(&path)
+            .parent()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_else(|| "/".to_string())
+    };
+
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .args(["-a", "Terminal", &dir])
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let terminals = ["x-terminal-emulator", "gnome-terminal", "konsole", "xterm"];
+        let mut launched = false;
+        for term in &terminals {
+            if std::process::Command::new(term)
+                .current_dir(&dir)
+                .spawn()
+                .is_ok()
+            {
+                launched = true;
+                break;
+            }
+        }
+        if !launched {
+            return Err("No terminal emulator found".to_string());
+        }
+    }
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("cmd")
+            .args(["/c", "start", "cmd", "/k", &format!("cd /d {}", dir)])
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[derive(Serialize)]
+struct DiskSpaceInfo {
+    total: u64,
+    available: u64,
+    used: u64,
+}
+
+#[tauri::command]
+async fn get_disk_space(path: String) -> Result<DiskSpaceInfo, String> {
+    let path = PathBuf::from(&path);
+    let meta = fs2::statvfs(&path).map_err(|e| e.to_string())?;
+    let total = meta.total_space();
+    let available = meta.available_space();
+    Ok(DiskSpaceInfo {
+        total,
+        available,
+        used: total.saturating_sub(available),
+    })
+}
+
+#[tauri::command]
 async fn search_files(
     root: String,
     query: String,
@@ -563,6 +629,8 @@ fn main() {
             search_files,
             log_file_open,
             get_recent_files,
+            open_in_terminal,
+            get_disk_space,
         ])
         .run(tauri::generate_context!())
         .expect("error running Noema");
