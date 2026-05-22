@@ -229,6 +229,53 @@ struct FileInfoDto {
 }
 
 #[tauri::command]
+async fn search_files(
+    root: String,
+    query: String,
+    limit: Option<usize>,
+) -> Result<Vec<FileEntryDto>, String> {
+    let root = PathBuf::from(&root);
+    let limit = limit.unwrap_or(100);
+    let query_lower = query.to_lowercase();
+
+    tokio::task::spawn_blocking(move || {
+        let mut results = Vec::new();
+        for entry in walkdir::WalkDir::new(&root)
+            .max_depth(8)
+            .into_iter()
+            .filter_map(|e| e.ok())
+        {
+            let name = entry.file_name().to_string_lossy();
+            if name.to_lowercase().contains(&query_lower) {
+                if let Ok(meta) = entry.metadata() {
+                    let created = meta.created()
+                        .map(chrono::DateTime::<chrono::Utc>::from)
+                        .unwrap_or_default();
+                    let modified = meta.modified()
+                        .map(chrono::DateTime::<chrono::Utc>::from)
+                        .unwrap_or_default();
+                    results.push(FileEntryDto {
+                        path: entry.path().to_string_lossy().to_string(),
+                        filename: name.to_string(),
+                        extension: entry.path().extension().map(|e| e.to_string_lossy().to_string()),
+                        size: meta.len(),
+                        created: created.to_rfc3339(),
+                        modified: modified.to_rfc3339(),
+                        is_dir: meta.is_dir(),
+                        is_hidden: name.starts_with('.'),
+                        is_symlink: entry.file_type().is_symlink(),
+                    });
+                    if results.len() >= limit { break; }
+                }
+            }
+        }
+        Ok::<_, String>(results)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
 async fn get_file_info(path: String) -> Result<FileInfoDto, String> {
     let path = PathBuf::from(&path);
     let meta = std::fs::metadata(&path).map_err(|e| e.to_string())?;
@@ -479,6 +526,7 @@ fn main() {
             read_file_preview,
             highlight_code,
             get_file_info,
+            search_files,
         ])
         .run(tauri::generate_context!())
         .expect("error running Noema");

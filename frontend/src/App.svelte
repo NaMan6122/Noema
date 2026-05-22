@@ -10,6 +10,7 @@
   import PreviewPane from './lib/PreviewPane.svelte';
   import InfoPanel from './lib/InfoPanel.svelte';
   import SearchBar from './lib/SearchBar.svelte';
+  import GlobalSearch from './lib/GlobalSearch.svelte';
 
   interface FileEntry {
     path: string;
@@ -61,6 +62,9 @@
   // Search filter
   let searchVisible = false;
   let searchQuery = '';
+
+  // Global search
+  let globalSearchVisible = false;
 
   // Command palette
   let paletteVisible = false;
@@ -508,7 +512,10 @@
   function handleKeydown(e: KeyboardEvent) {
     if (renamingPath || editingPath) return;
 
-    if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'p') {
+      e.preventDefault();
+      globalSearchVisible = !globalSearchVisible;
+    } else if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
       e.preventDefault();
       paletteVisible = !paletteVisible;
     } else if ((e.metaKey || e.ctrlKey) && e.key === 't') {
@@ -674,6 +681,13 @@
     visible={paletteVisible}
     commands={paletteCommands}
     onClose={() => paletteVisible = false}
+  />
+
+  <GlobalSearch
+    visible={globalSearchVisible}
+    {currentPath}
+    onNavigate={navigateTo}
+    onClose={() => globalSearchVisible = false}
   />
 </div>
 
