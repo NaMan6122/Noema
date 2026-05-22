@@ -17,6 +17,7 @@
   export let selectedPaths: Set<string>;
   export let sortField: string;
   export let sortDirection: string;
+  export let viewMode: 'list' | 'grid' = 'list';
   export let renamingPath: string;
   export let renameValue: string;
   export let dragOverPath: string;
@@ -198,30 +199,69 @@
   on:keydown={handleKeydown}
   tabindex="-1"
 >
-  <div class="list-header">
-    <div class="col-icon"></div>
-    <div class="col-name" on:click={() => onToggleSort('name')}>
-      Name{sortIndicator('name')}
+  {#if viewMode === 'list'}
+    <div class="list-header">
+      <div class="col-icon"></div>
+      <div class="col-name" on:click={() => onToggleSort('name')}>
+        Name{sortIndicator('name')}
+      </div>
+      <div class="col-size" on:click={() => onToggleSort('size')}>
+        Size{sortIndicator('size')}
+      </div>
+      <div class="col-modified" on:click={() => onToggleSort('modified')}>
+        Modified{sortIndicator('modified')}
+      </div>
     </div>
-    <div class="col-size" on:click={() => onToggleSort('size')}>
-      Size{sortIndicator('size')}
-    </div>
-    <div class="col-modified" on:click={() => onToggleSort('modified')}>
-      Modified{sortIndicator('modified')}
-    </div>
-  </div>
 
-  <div class="virtual-scroller" style="height: {totalHeight}px; position: relative;">
-    <div style="position: absolute; top: {offsetY}px; left: 0; right: 0;">
-      {#each visibleEntries as entry, vi}
-        {@const i = startIndex + vi}
+    <div class="virtual-scroller" style="height: {totalHeight}px; position: relative;">
+      <div style="position: absolute; top: {offsetY}px; left: 0; right: 0;">
+        {#each visibleEntries as entry, vi}
+          {@const i = startIndex + vi}
+          <div
+            class="list-row"
+            class:is-dir={entry.is_dir}
+            class:selected={selectedPaths.has(entry.path)}
+            class:focused={focusIndex === i}
+            class:drag-over={dragOverPath === entry.path}
+            style="height: {ROW_HEIGHT}px;"
+            draggable="true"
+            on:dragstart={(e) => onDragStart(e, entry)}
+            on:dragover={(e) => onDragOver(e, entry)}
+            on:dragleave={onDragLeave}
+            on:drop={(e) => onDrop(e, entry)}
+            on:click={(e) => { focusIndex = i; onSelect(entry, i, e); }}
+            on:dblclick={() => onOpen(entry)}
+            on:contextmenu|stopPropagation={(e) => onContextMenu(e, entry)}
+          >
+            <div class="col-icon">{getIcon(entry)}</div>
+            <div class="col-name">
+              {#if renamingPath === entry.path}
+                <input
+                  class="rename-input"
+                  type="text"
+                  bind:value={renameValue}
+                  on:blur={onCommitRename}
+                  on:keydown={(e) => { if (e.key === 'Enter') onCommitRename(); if (e.key === 'Escape') onCancelRename(); }}
+                  autofocus
+                />
+              {:else}
+                {entry.filename}
+              {/if}
+            </div>
+            <div class="col-size">{entry.is_dir ? '—' : formatSize(entry.size)}</div>
+            <div class="col-modified">{formatDate(entry.modified)}</div>
+          </div>
+        {/each}
+      </div>
+    </div>
+  {:else}
+    <div class="grid-view">
+      {#each entries as entry, i}
         <div
-          class="list-row"
-          class:is-dir={entry.is_dir}
+          class="grid-cell"
           class:selected={selectedPaths.has(entry.path)}
           class:focused={focusIndex === i}
           class:drag-over={dragOverPath === entry.path}
-          style="height: {ROW_HEIGHT}px;"
           draggable="true"
           on:dragstart={(e) => onDragStart(e, entry)}
           on:dragover={(e) => onDragOver(e, entry)}
@@ -231,8 +271,8 @@
           on:dblclick={() => onOpen(entry)}
           on:contextmenu|stopPropagation={(e) => onContextMenu(e, entry)}
         >
-          <div class="col-icon">{getIcon(entry)}</div>
-          <div class="col-name">
+          <div class="grid-icon">{getIcon(entry)}</div>
+          <div class="grid-name">
             {#if renamingPath === entry.path}
               <input
                 class="rename-input"
@@ -246,12 +286,10 @@
               {entry.filename}
             {/if}
           </div>
-          <div class="col-size">{entry.is_dir ? '—' : formatSize(entry.size)}</div>
-          <div class="col-modified">{formatDate(entry.modified)}</div>
         </div>
       {/each}
     </div>
-  </div>
+  {/if}
 
   {#if entries.length === 0}
     <div class="empty">Empty directory</div>
@@ -353,5 +391,55 @@
     color: #cdd6f4;
     font-size: 13px;
     outline: none;
+  }
+
+  .grid-view {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 4px;
+    padding: 12px;
+  }
+
+  .grid-cell {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 12px 8px 8px;
+    border-radius: 6px;
+    cursor: default;
+    user-select: none;
+  }
+
+  .grid-cell:hover {
+    background: #313244;
+  }
+
+  .grid-cell.selected {
+    background: #45475a;
+  }
+
+  .grid-cell.focused {
+    outline: 1px solid #89b4fa;
+    outline-offset: -1px;
+  }
+
+  .grid-cell.drag-over {
+    background: #89b4fa20;
+    outline: 1px dashed #89b4fa;
+  }
+
+  .grid-icon {
+    font-size: 40px;
+    margin-bottom: 6px;
+  }
+
+  .grid-name {
+    font-size: 11px;
+    text-align: center;
+    word-break: break-all;
+    line-height: 1.3;
+    max-height: 2.6em;
+    overflow: hidden;
+    width: 100%;
   }
 </style>

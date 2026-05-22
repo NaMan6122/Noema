@@ -30,6 +30,7 @@
     historyIndex: number;
     sortField: string;
     sortDirection: string;
+    viewMode: 'list' | 'grid';
   }
 
   let tabs: TabState[] = [];
@@ -86,6 +87,7 @@
   $: selectedPaths = activeTab?.selectedPaths ?? new Set<string>();
   $: sortField = activeTab?.sortField ?? 'name';
   $: sortDirection = activeTab?.sortDirection ?? 'asc';
+  $: viewMode = activeTab?.viewMode ?? 'list';
   $: tabBarData = tabs.map(t => ({ id: t.id, path: t.path, title: t.title }));
 
   function genId(): string {
@@ -120,6 +122,7 @@
         historyIndex: -1,
         sortField: t.sortField || 'name',
         sortDirection: t.sortDirection || 'asc',
+        viewMode: (t as any).viewMode || 'list',
       }));
       activeTabId = tabs[0].id;
       await loadDirectory(tabs[0].path);
@@ -136,6 +139,7 @@
         historyIndex: -1,
         sortField: 'name',
         sortDirection: 'asc',
+        viewMode: 'list',
       }];
       activeTabId = id;
       await loadDirectory(home);
@@ -154,6 +158,7 @@
       path: t.path,
       sortField: t.sortField,
       sortDirection: t.sortDirection,
+      viewMode: t.viewMode,
     }));
     invoke('save_workspace', { name: 'last_session', stateJson: JSON.stringify(state) }).catch(() => {});
   }
@@ -289,6 +294,7 @@
       historyIndex: -1,
       sortField: 'name',
       sortDirection: 'asc',
+      viewMode: 'list',
     }];
     activeTabId = id;
     loadDirectory(path);
@@ -494,7 +500,13 @@
     } else if ((e.metaKey || e.ctrlKey) && e.key === 'w') {
       e.preventDefault();
       closeTab(activeTabId);
-    } else if ((e.metaKey || e.ctrlKey) && e.key >= '1' && e.key <= '9') {
+    } else if ((e.metaKey || e.ctrlKey) && e.key === '1') {
+      e.preventDefault();
+      updateActiveTab({ viewMode: 'list' });
+    } else if ((e.metaKey || e.ctrlKey) && e.key === '2') {
+      e.preventDefault();
+      updateActiveTab({ viewMode: 'grid' });
+    } else if ((e.metaKey || e.ctrlKey) && e.key >= '3' && e.key <= '9') {
       e.preventDefault();
       const idx = parseInt(e.key) - 1;
       if (idx < tabs.length) activeTabId = tabs[idx].id;
@@ -558,6 +570,9 @@
       {/if}
     </div>
     <div class="actions">
+      <button class="view-toggle" on:click={() => updateActiveTab({ viewMode: viewMode === 'list' ? 'grid' : 'list' })} title={viewMode === 'list' ? 'Grid view (Cmd+2)' : 'List view (Cmd+1)'}>
+        {viewMode === 'list' ? '⊞' : '☰'}
+      </button>
       <label>
         <input type="checkbox" bind:checked={showHidden} on:change={() => loadDirectory(currentPath)} />
         Hidden
@@ -581,6 +596,7 @@
           {selectedPaths}
           {sortField}
           {sortDirection}
+          {viewMode}
           {renamingPath}
           bind:renameValue
           {dragOverPath}
@@ -674,6 +690,20 @@
   .nav-buttons button:disabled {
     opacity: 0.4;
     cursor: default;
+  }
+
+  .view-toggle {
+    padding: 4px 8px;
+    border: 1px solid #45475a;
+    border-radius: 4px;
+    background: #313244;
+    color: #cdd6f4;
+    cursor: pointer;
+    font-size: 14px;
+  }
+
+  .view-toggle:hover {
+    background: #45475a;
   }
 
   .breadcrumb {
