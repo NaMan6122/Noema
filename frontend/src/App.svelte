@@ -8,6 +8,7 @@
   import TabBar from './lib/TabBar.svelte';
   import CommandPalette from './lib/CommandPalette.svelte';
   import PreviewPane from './lib/PreviewPane.svelte';
+  import InfoPanel from './lib/InfoPanel.svelte';
 
   interface FileEntry {
     path: string;
@@ -52,6 +53,9 @@
 
   // Preview pane
   let previewVisible = false;
+
+  // Info panel
+  let infoVisible = false;
 
   // Command palette
   let paletteVisible = false;
@@ -526,6 +530,9 @@
     } else if (e.key === 'z' && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
       handleUndo();
+    } else if ((e.metaKey || e.ctrlKey) && e.key === 'i') {
+      e.preventDefault();
+      infoVisible = !infoVisible;
     } else if (e.key === 'Delete' || (e.key === 'Backspace' && e.metaKey)) {
       handleDelete();
     } else if (e.key === ' ' && !e.metaKey && !e.ctrlKey) {
@@ -641,6 +648,8 @@
     <span>{selectedPaths.size > 0 ? `${selectedPaths.size} selected` : `${entries.length} items`}</span>
     <span>{currentPath}</span>
   </footer>
+
+  <InfoPanel path={selectedPaths.size === 1 ? [...selectedPaths][0] : null} bind:visible={infoVisible} />
 
   <ProgressToast />
 

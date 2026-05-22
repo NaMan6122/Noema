@@ -215,6 +215,46 @@ async fn check_conflicts(
     Ok(conflicts)
 }
 
+#[derive(Serialize)]
+struct FileInfoDto {
+    path: String,
+    filename: String,
+    size: u64,
+    created: String,
+    modified: String,
+    is_dir: bool,
+    is_symlink: bool,
+    permissions: String,
+    extension: Option<String>,
+}
+
+#[tauri::command]
+async fn get_file_info(path: String) -> Result<FileInfoDto, String> {
+    let path = PathBuf::from(&path);
+    let meta = std::fs::metadata(&path).map_err(|e| e.to_string())?;
+    let symlink_meta = std::fs::symlink_metadata(&path).map_err(|e| e.to_string())?;
+
+    #[cfg(unix)]
+    let permissions = {
+        use std::os::unix::fs::PermissionsExt;
+        format!("{:o}", meta.permissions().mode() & 0o777)
+    };
+    #[cfg(not(unix))]
+    let permissions = if meta.permissions().readonly() { "readonly".to_string() } else { "read-write".to_string() };
+
+    Ok(FileInfoDto {
+        path: path.to_string_lossy().to_string(),
+        filename: path.file_name().unwrap_or_default().to_string_lossy().to_string(),
+        size: meta.len(),
+        created: meta.created().map(chrono::DateTime::<chrono::Utc>::from).unwrap_or_default().to_rfc3339(),
+        modified: meta.modified().map(chrono::DateTime::<chrono::Utc>::from).unwrap_or_default().to_rfc3339(),
+        is_dir: meta.is_dir(),
+        is_symlink: symlink_meta.file_type().is_symlink(),
+        permissions,
+        extension: path.extension().map(|e| e.to_string_lossy().to_string()),
+    })
+}
+
 #[tauri::command]
 async fn highlight_code(
     path: String,
@@ -438,6 +478,7 @@ fn main() {
             get_thumbnail,
             read_file_preview,
             highlight_code,
+            get_file_info,
         ])
         .run(tauri::generate_context!())
         .expect("error running Noema");
