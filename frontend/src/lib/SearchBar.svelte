@@ -41,8 +41,8 @@
     align-items: center;
     gap: 8px;
     padding: 6px 12px;
-    background: #181825;
-    border-bottom: 1px solid #313244;
+    background: var(--bg-mantle);
+    border-bottom: 1px solid var(--bg-surface0);
   }
 
   .search-icon {
@@ -52,28 +52,28 @@
   .search-input {
     flex: 1;
     padding: 5px 8px;
-    border: 1px solid #45475a;
+    border: 1px solid var(--bg-surface1);
     border-radius: 4px;
-    background: #1e1e2e;
-    color: #cdd6f4;
+    background: var(--bg-base);
+    color: var(--text-primary);
     font-size: 13px;
     outline: none;
   }
 
   .search-input:focus {
-    border-color: #89b4fa;
+    border-color: var(--accent-blue);
   }
 
   .search-close {
     border: none;
     background: none;
-    color: #6c7086;
+    color: var(--text-muted);
     font-size: 16px;
     cursor: pointer;
     padding: 0 4px;
   }
 
   .search-close:hover {
-    color: #cdd6f4;
+    color: var(--text-primary);
   }
 </style>

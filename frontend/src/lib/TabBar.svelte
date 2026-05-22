@@ -74,8 +74,8 @@
   .tab-bar {
     display: flex;
     align-items: stretch;
-    background: #11111b;
-    border-bottom: 1px solid #313244;
+    background: var(--bg-crust);
+    border-bottom: 1px solid var(--bg-surface0);
     overflow-x: auto;
     min-height: 32px;
     gap: 1px;
@@ -87,8 +87,8 @@
     align-items: center;
     gap: 6px;
     padding: 4px 12px;
-    background: #181825;
-    color: #6c7086;
+    background: var(--bg-mantle);
+    color: var(--text-muted);
     font-size: 12px;
     cursor: pointer;
     border-radius: 6px 6px 0 0;
@@ -100,18 +100,18 @@
   }
 
   .tab:hover {
-    background: #1e1e2e;
-    color: #a6adc8;
+    background: var(--bg-base);
+    color: var(--text-subtext);
   }
 
   .tab.active {
-    background: #1e1e2e;
-    color: #cdd6f4;
-    border-bottom: 2px solid #89b4fa;
+    background: var(--bg-base);
+    color: var(--text-primary);
+    border-bottom: 2px solid var(--accent-blue);
   }
 
   .tab.drag-over {
-    background: #313244;
+    background: var(--bg-surface0);
   }
 
   .tab-title {
@@ -124,7 +124,7 @@
   .tab-close {
     border: none;
     background: none;
-    color: #6c7086;
+    color: var(--text-muted);
     cursor: pointer;
     padding: 0 2px;
     font-size: 14px;
@@ -134,14 +134,14 @@
   }
 
   .tab-close:hover {
-    background: #45475a;
-    color: #f38ba8;
+    background: var(--bg-surface1);
+    color: var(--accent-red);
   }
 
   .tab-new {
     border: none;
     background: none;
-    color: #6c7086;
+    color: var(--text-muted);
     cursor: pointer;
     padding: 4px 10px;
     font-size: 16px;
@@ -151,7 +151,7 @@
   }
 
   .tab-new:hover {
-    background: #1e1e2e;
-    color: #cdd6f4;
+    background: var(--bg-base);
+    color: var(--text-primary);
   }
 </style>

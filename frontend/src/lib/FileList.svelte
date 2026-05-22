@@ -330,10 +330,10 @@
     display: grid;
     grid-template-columns: 32px 1fr 90px 120px;
     padding: 6px 12px;
-    background: #181825;
-    border-bottom: 1px solid #313244;
+    background: var(--bg-mantle);
+    border-bottom: 1px solid var(--bg-surface0);
     font-weight: 600;
-    color: #a6adc8;
+    color: var(--text-subtext);
     font-size: 11px;
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -348,28 +348,28 @@
     display: grid;
     grid-template-columns: 32px 1fr 90px 120px;
     padding: 0 12px;
-    border-bottom: 1px solid #31324420;
+    border-bottom: 1px solid var(--bg-surface0)20;
     cursor: default;
     align-items: center;
     box-sizing: border-box;
   }
 
   .list-row:hover {
-    background: #313244;
+    background: var(--bg-surface0);
   }
 
   .list-row.selected {
-    background: #45475a;
+    background: var(--bg-surface1);
   }
 
   .list-row.focused {
-    outline: 1px solid #89b4fa;
+    outline: 1px solid var(--accent-blue);
     outline-offset: -1px;
   }
 
   .list-row.drag-over {
-    background: #89b4fa20;
-    outline: 1px dashed #89b4fa;
+    background: var(--accent-blue)20;
+    outline: 1px dashed var(--accent-blue);
     outline-offset: -1px;
   }
 
@@ -390,7 +390,7 @@
   }
 
   .col-size, .col-modified {
-    color: #a6adc8;
+    color: var(--text-subtext);
     font-size: 12px;
     text-align: right;
   }
@@ -398,16 +398,16 @@
   .empty {
     padding: 40px;
     text-align: center;
-    color: #6c7086;
+    color: var(--text-muted);
   }
 
   .rename-input {
     width: 100%;
     padding: 1px 4px;
-    border: 1px solid #89b4fa;
+    border: 1px solid var(--accent-blue);
     border-radius: 3px;
-    background: #1e1e2e;
-    color: #cdd6f4;
+    background: var(--bg-base);
+    color: var(--text-primary);
     font-size: 13px;
     outline: none;
   }
@@ -430,21 +430,21 @@
   }
 
   .grid-cell:hover {
-    background: #313244;
+    background: var(--bg-surface0);
   }
 
   .grid-cell.selected {
-    background: #45475a;
+    background: var(--bg-surface1);
   }
 
   .grid-cell.focused {
-    outline: 1px solid #89b4fa;
+    outline: 1px solid var(--accent-blue);
     outline-offset: -1px;
   }
 
   .grid-cell.drag-over {
-    background: #89b4fa20;
-    outline: 1px dashed #89b4fa;
+    background: var(--accent-blue)20;
+    outline: 1px dashed var(--accent-blue);
   }
 
   .grid-icon {

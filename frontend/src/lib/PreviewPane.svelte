@@ -111,8 +111,8 @@
     width: 40%;
     min-width: 250px;
     max-width: 500px;
-    border-left: 1px solid #313244;
-    background: #181825;
+    border-left: 1px solid var(--bg-surface0);
+    background: var(--bg-mantle);
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -123,12 +123,12 @@
     justify-content: space-between;
     align-items: center;
     padding: 10px 14px;
-    border-bottom: 1px solid #313244;
+    border-bottom: 1px solid var(--bg-surface0);
   }
 
   .preview-filename {
     font-weight: 600;
-    color: #cdd6f4;
+    color: var(--text-primary);
     font-size: 13px;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -136,7 +136,7 @@
   }
 
   .preview-meta {
-    color: #6c7086;
+    color: var(--text-muted);
     font-size: 11px;
     flex-shrink: 0;
     margin-left: 8px;
@@ -164,7 +164,7 @@
     font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
     font-size: 12px;
     line-height: 1.5;
-    color: #cdd6f4;
+    color: var(--text-primary);
     white-space: pre-wrap;
     word-break: break-all;
     tab-size: 4;
@@ -186,7 +186,7 @@
   }
 
   .preview-placeholder, .preview-loading {
-    color: #6c7086;
+    color: var(--text-muted);
     font-size: 13px;
     padding: 40px;
     text-align: center;
@@ -194,9 +194,9 @@
 
   .preview-footer {
     padding: 8px 14px;
-    border-top: 1px solid #313244;
+    border-top: 1px solid var(--bg-surface0);
     font-size: 11px;
-    color: #6c7086;
+    color: var(--text-muted);
     display: flex;
     flex-direction: column;
     gap: 2px;

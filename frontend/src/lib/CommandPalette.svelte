@@ -89,7 +89,7 @@
   .palette-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.5);
+    background: var(--overlay);
     display: flex;
     justify-content: center;
     padding-top: 20vh;
@@ -99,11 +99,11 @@
   .palette {
     width: 500px;
     max-height: 400px;
-    background: #1e1e2e;
-    border: 1px solid #45475a;
+    background: var(--bg-base);
+    border: 1px solid var(--bg-surface1);
     border-radius: 10px;
     overflow: hidden;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+    box-shadow: 0 8px 32px var(--shadow);
     display: flex;
     flex-direction: column;
     align-self: flex-start;
@@ -112,15 +112,15 @@
   .palette-input {
     padding: 14px 18px;
     border: none;
-    border-bottom: 1px solid #313244;
+    border-bottom: 1px solid var(--bg-surface0);
     background: transparent;
-    color: #cdd6f4;
+    color: var(--text-primary);
     font-size: 15px;
     outline: none;
   }
 
   .palette-input::placeholder {
-    color: #6c7086;
+    color: var(--text-muted);
   }
 
   .palette-list {
@@ -137,7 +137,7 @@
     padding: 8px 18px;
     border: none;
     background: none;
-    color: #cdd6f4;
+    color: var(--text-primary);
     font-size: 13px;
     text-align: left;
     cursor: pointer;
@@ -145,18 +145,18 @@
 
   .palette-item:hover,
   .palette-item.selected {
-    background: #313244;
+    background: var(--bg-surface0);
   }
 
   .shortcut {
-    color: #6c7086;
+    color: var(--text-muted);
     font-size: 11px;
     font-family: 'SF Mono', Monaco, monospace;
   }
 
   .no-results {
     padding: 16px 18px;
-    color: #6c7086;
+    color: var(--text-muted);
     font-size: 13px;
     text-align: center;
   }

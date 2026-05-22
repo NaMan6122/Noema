@@ -42,7 +42,7 @@
   .overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.6);
+    background: var(--shadow);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -50,23 +50,23 @@
   }
 
   .dialog {
-    background: #1e1e2e;
-    border: 1px solid #45475a;
+    background: var(--bg-base);
+    border: 1px solid var(--bg-surface1);
     border-radius: 10px;
     padding: 20px 24px;
     min-width: 340px;
     max-width: 420px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+    box-shadow: 0 8px 24px var(--overlay);
   }
 
   h3 {
     margin: 0 0 8px;
-    color: #cdd6f4;
+    color: var(--text-primary);
     font-size: 15px;
   }
 
   .message {
-    color: #a6adc8;
+    color: var(--text-subtext);
     font-size: 13px;
     margin: 0 0 16px;
   }
@@ -79,7 +79,7 @@
 
   .apply-all {
     font-size: 12px;
-    color: #a6adc8;
+    color: var(--text-subtext);
     display: flex;
     align-items: center;
     gap: 4px;
@@ -92,27 +92,27 @@
 
   .btn {
     padding: 6px 14px;
-    border: 1px solid #45475a;
+    border: 1px solid var(--bg-surface1);
     border-radius: 6px;
-    background: #313244;
-    color: #cdd6f4;
+    background: var(--bg-surface0);
+    color: var(--text-primary);
     font-size: 13px;
     cursor: pointer;
   }
 
   .btn:hover {
-    background: #45475a;
+    background: var(--bg-surface1);
   }
 
   .btn.replace {
-    background: #89b4fa;
-    border-color: #89b4fa;
-    color: #1e1e2e;
+    background: var(--accent-blue);
+    border-color: var(--accent-blue);
+    color: var(--bg-base);
     font-weight: 500;
   }
 
   .btn.replace:hover {
-    background: #74c7ec;
-    border-color: #74c7ec;
+    background: var(--accent-sapphire);
+    border-color: var(--accent-sapphire);
   }
 </style>
