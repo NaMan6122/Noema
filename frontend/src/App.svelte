@@ -1,6 +1,10 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
+  import { listen } from '@tauri-apps/api/event';
   import { onMount } from 'svelte';
+  import ProgressToast from './lib/ProgressToast.svelte';
+  import Sidebar from './lib/Sidebar.svelte';
+  import FileList from './lib/FileList.svelte';
 
   interface FileEntry {
     path: string;
@@ -35,14 +39,26 @@
   let renamingPath = '';
   let renameValue = '';
 
+  // Drag-drop
+  let dragOverPath = '';
+
+  // Breadcrumb
+  let editingPath = false;
+  let pathInputValue = '';
+
   onMount(async () => {
     const home = await invoke<string>('get_home_dir');
     await navigateTo(home);
+
+    listen('fs:changed', () => {
+      navigateTo(currentPath);
+    });
   });
 
   async function navigateTo(path: string) {
     loading = true;
     error = '';
+    editingPath = false;
     try {
       entries = await invoke<FileEntry[]>('list_directory', {
         path,
@@ -114,6 +130,35 @@
     selectedPaths = new Set(entries.map(e => e.path));
   }
 
+  // Breadcrumb
+  $: pathSegments = buildBreadcrumb(currentPath);
+
+  function buildBreadcrumb(path: string): { name: string; path: string }[] {
+    if (!path) return [];
+    const parts = path.split('/').filter(Boolean);
+    const segments = [{ name: '/', path: '/' }];
+    let accumulated = '';
+    for (const part of parts) {
+      accumulated += '/' + part;
+      segments.push({ name: part, path: accumulated });
+    }
+    return segments;
+  }
+
+  function startEditingPath() {
+    editingPath = true;
+    pathInputValue = currentPath;
+  }
+
+  function commitPathEdit(e: KeyboardEvent) {
+    if (e.key === 'Enter') {
+      editingPath = false;
+      navigateTo(pathInputValue);
+    } else if (e.key === 'Escape') {
+      editingPath = false;
+    }
+  }
+
   // Context menu
   function showContextMenu(event: MouseEvent, entry?: FileEntry) {
     event.preventDefault();
@@ -165,6 +210,10 @@
     }
   }
 
+  function cancelRename() {
+    renamingPath = '';
+  }
+
   async function handleNewFolder() {
     hideContextMenu();
     const name = 'New Folder';
@@ -198,6 +247,46 @@
     }
   }
 
+  function handleDragStart(event: DragEvent, entry: FileEntry) {
+    if (!event.dataTransfer) return;
+    const paths = selectedPaths.has(entry.path) ? [...selectedPaths] : [entry.path];
+    event.dataTransfer.setData('application/json', JSON.stringify(paths));
+    event.dataTransfer.effectAllowed = 'copyMove';
+  }
+
+  function handleDragOver(event: DragEvent, entry: FileEntry) {
+    if (!entry.is_dir) return;
+    event.preventDefault();
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = event.altKey ? 'copy' : 'move';
+    }
+    dragOverPath = entry.path;
+  }
+
+  function handleDragLeave() {
+    dragOverPath = '';
+  }
+
+  async function handleDrop(event: DragEvent, entry: FileEntry) {
+    event.preventDefault();
+    dragOverPath = '';
+    if (!entry.is_dir || !event.dataTransfer) return;
+
+    const raw = event.dataTransfer.getData('application/json');
+    if (!raw) return;
+    const sources: string[] = JSON.parse(raw);
+
+    try {
+      if (event.altKey) {
+        await invoke('copy_files', { sources, dest: entry.path });
+      } else {
+        await invoke('move_files', { sources, dest: entry.path });
+      }
+    } catch (e) {
+      error = String(e);
+    }
+  }
+
   function toggleSort(field: string) {
     if (sortField === field) {
       sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
@@ -208,41 +297,8 @@
     navigateTo(currentPath);
   }
 
-  function formatSize(bytes: number): string {
-    if (bytes === 0) return '—';
-    const units = ['B', 'KB', 'MB', 'GB'];
-    let i = 0;
-    let size = bytes;
-    while (size >= 1024 && i < units.length - 1) {
-      size /= 1024;
-      i++;
-    }
-    return `${size.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
-  }
-
-  function formatDate(iso: string): string {
-    const d = new Date(iso);
-    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
-  }
-
-  function getIcon(entry: FileEntry): string {
-    if (entry.is_dir) return '📁';
-    const ext = entry.extension?.toLowerCase();
-    if (!ext) return '📄';
-    if (['pdf'].includes(ext)) return '📕';
-    if (['doc', 'docx'].includes(ext)) return '📘';
-    if (['xls', 'xlsx', 'csv'].includes(ext)) return '📊';
-    if (['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp'].includes(ext)) return '🖼️';
-    if (['mp3', 'wav', 'flac', 'aac'].includes(ext)) return '🎵';
-    if (['mp4', 'mov', 'avi', 'mkv'].includes(ext)) return '🎬';
-    if (['zip', 'tar', 'gz', 'rar', '7z'].includes(ext)) return '📦';
-    if (['rs', 'py', 'js', 'ts', 'go', 'c', 'cpp', 'java'].includes(ext)) return '⚙️';
-    if (['md', 'txt', 'rtf'].includes(ext)) return '📝';
-    return '📄';
-  }
-
   function handleKeydown(e: KeyboardEvent) {
-    if (renamingPath) return;
+    if (renamingPath || editingPath) return;
     if (e.key === 'Backspace' && !e.metaKey) {
       goUp();
     } else if (e.key === 'a' && (e.metaKey || e.ctrlKey)) {
@@ -267,11 +323,29 @@
       <button on:click={goUp} title="Go up">↑</button>
     </div>
     <div class="breadcrumb">
-      <input
-        type="text"
-        value={currentPath}
-        on:keydown={(e) => { if (e.key === 'Enter') navigateTo(e.currentTarget.value); }}
-      />
+      {#if editingPath}
+        <input
+          class="path-input"
+          type="text"
+          bind:value={pathInputValue}
+          on:keydown={commitPathEdit}
+          on:blur={() => editingPath = false}
+          autofocus
+        />
+      {:else}
+        <div class="breadcrumb-segments" on:dblclick={startEditingPath}>
+          {#each pathSegments as seg, i}
+            {#if i > 0}
+              <span class="breadcrumb-sep">/</span>
+            {/if}
+            {#if i === pathSegments.length - 1}
+              <span class="breadcrumb-current">{seg.name}</span>
+            {:else}
+              <button class="breadcrumb-link" on:click={() => navigateTo(seg.path)}>{seg.name}</button>
+            {/if}
+          {/each}
+        </div>
+      {/if}
     </div>
     <div class="actions">
       <label>
@@ -285,57 +359,34 @@
     <div class="error">{error}</div>
   {/if}
 
-  <div class="file-list" on:contextmenu={(e) => showContextMenu(e)}>
-    <div class="list-header">
-      <div class="col-icon"></div>
-      <div class="col-name" on:click={() => toggleSort('name')}>
-        Name {sortField === 'name' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
-      </div>
-      <div class="col-size" on:click={() => toggleSort('size')}>
-        Size {sortField === 'size' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
-      </div>
-      <div class="col-modified" on:click={() => toggleSort('modified')}>
-        Modified {sortField === 'modified' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
-      </div>
-    </div>
+  <div class="main-content">
+    <Sidebar {currentPath} onNavigate={navigateTo} />
 
-    {#if loading}
-      <div class="loading">Loading...</div>
-    {:else}
-      {#each entries as entry, i}
-        <div
-          class="list-row"
-          class:is-dir={entry.is_dir}
-          class:selected={selectedPaths.has(entry.path)}
-          on:click={(e) => selectEntry(entry, i, e)}
-          on:dblclick={() => openEntry(entry)}
-          on:contextmenu|stopPropagation={(e) => showContextMenu(e, entry)}
-          tabindex="0"
-          on:keydown={(e) => { if (e.key === 'Enter') openEntry(entry); }}
-        >
-          <div class="col-icon">{getIcon(entry)}</div>
-          <div class="col-name">
-            {#if renamingPath === entry.path}
-              <input
-                class="rename-input"
-                type="text"
-                bind:value={renameValue}
-                on:blur={commitRename}
-                on:keydown={(e) => { if (e.key === 'Enter') commitRename(); if (e.key === 'Escape') { renamingPath = ''; } }}
-                autofocus
-              />
-            {:else}
-              {entry.filename}
-            {/if}
-          </div>
-          <div class="col-size">{entry.is_dir ? '—' : formatSize(entry.size)}</div>
-          <div class="col-modified">{formatDate(entry.modified)}</div>
-        </div>
-      {/each}
-      {#if entries.length === 0}
-        <div class="empty">Empty directory</div>
+    <div class="content-area">
+      {#if loading}
+        <div class="loading">Loading...</div>
+      {:else}
+        <FileList
+          {entries}
+          {selectedPaths}
+          {sortField}
+          {sortDirection}
+          {renamingPath}
+          bind:renameValue
+          {dragOverPath}
+          onSelect={selectEntry}
+          onOpen={openEntry}
+          onContextMenu={showContextMenu}
+          onDragStart={handleDragStart}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          onToggleSort={toggleSort}
+          onCommitRename={commitRename}
+          onCancelRename={cancelRename}
+        />
       {/if}
-    {/if}
+    </div>
   </div>
 
   {#if contextMenu.visible}
@@ -354,6 +405,8 @@
     <span>{selectedPaths.size > 0 ? `${selectedPaths.size} selected` : `${entries.length} items`}</span>
     <span>{currentPath}</span>
   </footer>
+
+  <ProgressToast />
 </div>
 
 <style>
@@ -410,9 +463,10 @@
   .breadcrumb {
     flex: 1;
     -webkit-app-region: no-drag;
+    min-width: 0;
   }
 
-  .breadcrumb input {
+  .path-input {
     width: 100%;
     padding: 5px 10px;
     border: 1px solid #45475a;
@@ -421,11 +475,58 @@
     color: #cdd6f4;
     font-size: 12px;
     font-family: 'SF Mono', Monaco, monospace;
+    box-sizing: border-box;
   }
 
-  .breadcrumb input:focus {
+  .path-input:focus {
     outline: none;
     border-color: #89b4fa;
+  }
+
+  .breadcrumb-segments {
+    display: flex;
+    align-items: center;
+    padding: 4px 8px;
+    border-radius: 4px;
+    background: #1e1e2e;
+    border: 1px solid transparent;
+    min-height: 28px;
+    overflow: hidden;
+    cursor: text;
+  }
+
+  .breadcrumb-segments:hover {
+    border-color: #45475a;
+  }
+
+  .breadcrumb-link {
+    border: none;
+    background: none;
+    color: #89b4fa;
+    cursor: pointer;
+    padding: 2px 4px;
+    border-radius: 3px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  .breadcrumb-link:hover {
+    background: #313244;
+    text-decoration: underline;
+  }
+
+  .breadcrumb-sep {
+    color: #6c7086;
+    margin: 0 1px;
+    font-size: 12px;
+  }
+
+  .breadcrumb-current {
+    color: #cdd6f4;
+    font-weight: 500;
+    font-size: 12px;
+    padding: 2px 4px;
+    white-space: nowrap;
   }
 
   .actions {
@@ -444,73 +545,20 @@
     border-bottom: 1px solid #f38ba840;
   }
 
-  .file-list {
+  .main-content {
+    display: flex;
     flex: 1;
-    overflow-y: auto;
-    overflow-x: hidden;
-  }
-
-  .list-header {
-    display: grid;
-    grid-template-columns: 32px 1fr 90px 120px;
-    padding: 6px 12px;
-    background: #181825;
-    border-bottom: 1px solid #313244;
-    font-weight: 600;
-    color: #a6adc8;
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    position: sticky;
-    top: 0;
-    cursor: pointer;
-    user-select: none;
-  }
-
-  .list-row {
-    display: grid;
-    grid-template-columns: 32px 1fr 90px 120px;
-    padding: 4px 12px;
-    border-bottom: 1px solid #31324420;
-    cursor: default;
-    align-items: center;
-  }
-
-  .list-row:hover {
-    background: #313244;
-  }
-
-  .list-row:focus {
-    outline: none;
-  }
-
-  .list-row.selected {
-    background: #45475a;
-  }
-
-  .list-row.is-dir .col-name {
-    font-weight: 500;
-  }
-
-  .col-icon {
-    font-size: 16px;
-    text-align: center;
-  }
-
-  .col-name {
     overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    padding-right: 8px;
   }
 
-  .col-size, .col-modified {
-    color: #a6adc8;
-    font-size: 12px;
-    text-align: right;
+  .content-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
   }
 
-  .loading, .empty {
+  .loading {
     padding: 40px;
     text-align: center;
     color: #6c7086;
@@ -524,17 +572,6 @@
     border-top: 1px solid #313244;
     color: #6c7086;
     font-size: 11px;
-  }
-
-  .rename-input {
-    width: 100%;
-    padding: 1px 4px;
-    border: 1px solid #89b4fa;
-    border-radius: 3px;
-    background: #1e1e2e;
-    color: #cdd6f4;
-    font-size: 13px;
-    outline: none;
   }
 
   .context-menu {

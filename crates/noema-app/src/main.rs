@@ -5,16 +5,23 @@ use std::sync::Arc;
 
 use noema_core::config::AppConfig;
 use noema_core::db::Database;
-use noema_core::events::EventBus;
+use noema_core::events::{AppEvent, EventBus};
 use noema_core::types::{FileEntry, SortDirection, SortField, SortOrder};
 use noema_fs::ops::FileOpsEngine;
 use serde::Serialize;
-use tauri::State;
+use tauri::{Emitter, State};
 
 struct AppState {
     fs_engine: Arc<FileOpsEngine>,
     event_bus: Arc<EventBus>,
     db: Arc<Database>,
+}
+
+#[derive(Serialize)]
+struct FavoriteEntry {
+    name: String,
+    path: String,
+    kind: String, // "favorite" or "volume"
 }
 
 #[derive(Serialize)]
@@ -169,10 +176,104 @@ async fn undo(state: State<'_, AppState>) -> Result<(), String> {
     state.fs_engine.undo().await.map_err(|e| e.to_string())
 }
 
+#[derive(Serialize)]
+struct ConflictInfo {
+    source: String,
+    dest: String,
+    filename: String,
+}
+
+#[tauri::command]
+async fn check_conflicts(
+    sources: Vec<String>,
+    dest: String,
+) -> Result<Vec<ConflictInfo>, String> {
+    let dest = PathBuf::from(&dest);
+    let mut conflicts = Vec::new();
+    for source in &sources {
+        let source_path = PathBuf::from(source);
+        if let Some(filename) = source_path.file_name() {
+            let dest_path = dest.join(filename);
+            if dest_path.exists() {
+                conflicts.push(ConflictInfo {
+                    source: source.clone(),
+                    dest: dest_path.to_string_lossy().to_string(),
+                    filename: filename.to_string_lossy().to_string(),
+                });
+            }
+        }
+    }
+    Ok(conflicts)
+}
+
+#[tauri::command]
+async fn get_favorites() -> Result<Vec<FavoriteEntry>, String> {
+    let mut favorites = Vec::new();
+
+    let dirs_map: Vec<(&str, Option<PathBuf>)> = vec![
+        ("Home", dirs::home_dir()),
+        ("Desktop", dirs::desktop_dir()),
+        ("Documents", dirs::document_dir()),
+        ("Downloads", dirs::download_dir()),
+        ("Pictures", dirs::picture_dir()),
+        ("Music", dirs::audio_dir()),
+        ("Videos", dirs::video_dir()),
+    ];
+
+    for (name, path) in dirs_map {
+        if let Some(p) = path {
+            if p.exists() {
+                favorites.push(FavoriteEntry {
+                    name: name.to_string(),
+                    path: p.to_string_lossy().to_string(),
+                    kind: "favorite".to_string(),
+                });
+            }
+        }
+    }
+
+    // Volumes (macOS: /Volumes/*, Linux: /mnt/* and /media/*, Windows: drive letters)
+    #[cfg(target_os = "macos")]
+    {
+        if let Ok(entries) = std::fs::read_dir("/Volumes") {
+            for entry in entries.flatten() {
+                let name = entry.file_name().to_string_lossy().to_string();
+                if name == "Macintosh HD" {
+                    continue;
+                }
+                favorites.push(FavoriteEntry {
+                    name,
+                    path: entry.path().to_string_lossy().to_string(),
+                    kind: "volume".to_string(),
+                });
+            }
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        for mount_dir in &["/mnt", "/media"] {
+            if let Ok(entries) = std::fs::read_dir(mount_dir) {
+                for entry in entries.flatten() {
+                    if entry.path().is_dir() {
+                        favorites.push(FavoriteEntry {
+                            name: entry.file_name().to_string_lossy().to_string(),
+                            path: entry.path().to_string_lossy().to_string(),
+                            kind: "volume".to_string(),
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(favorites)
+}
+
 fn main() {
     tracing_subscriber::fmt::init();
 
-    let config = AppConfig::load_or_default();
+    let _config = AppConfig::load_or_default();
     let data_dir = AppConfig::data_dir();
     let db_path = data_dir.join("index.db");
 
@@ -184,15 +285,52 @@ fn main() {
 
     let app_state = AppState {
         fs_engine,
-        event_bus,
+        event_bus: event_bus.clone(),
         db,
     };
 
     tauri::Builder::default()
         .manage(app_state)
+        .setup(move |app| {
+            let handle = app.handle().clone();
+            let mut rx = event_bus.subscribe();
+            tauri::async_runtime::spawn(async move {
+                while let Ok(event) = rx.recv().await {
+                    match event {
+                        AppEvent::OperationStarted { id, op_type, total_items } => {
+                            let _ = handle.emit("op:started", serde_json::json!({
+                                "id": id.0.to_string(),
+                                "opType": format!("{:?}", op_type),
+                                "totalItems": total_items,
+                            }));
+                        }
+                        AppEvent::OperationProgress { id, processed, current } => {
+                            let _ = handle.emit("op:progress", serde_json::json!({
+                                "id": id.0.to_string(),
+                                "processed": processed,
+                                "current": current.to_string_lossy(),
+                            }));
+                        }
+                        AppEvent::OperationComplete { id, success, error } => {
+                            let _ = handle.emit("op:complete", serde_json::json!({
+                                "id": id.0.to_string(),
+                                "success": success,
+                                "error": error,
+                            }));
+                        }
+                        AppEvent::FileChanged { .. } => {
+                            let _ = handle.emit("fs:changed", ());
+                        }
+                        _ => {}
+                    }
+                }
+            });
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             list_directory,
             get_home_dir,
+            get_favorites,
             copy_files,
             move_files,
             delete_files,
@@ -200,6 +338,7 @@ fn main() {
             create_directory,
             create_file,
             undo,
+            check_conflicts,
         ])
         .run(tauri::generate_context!())
         .expect("error running Noema");
