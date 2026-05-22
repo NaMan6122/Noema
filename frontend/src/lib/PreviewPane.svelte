@@ -17,6 +17,7 @@
   export let visible = false;
 
   let content = '';
+  let highlightedHtml = '';
   let imageDataUri = '';
   let loading = false;
 
@@ -24,6 +25,9 @@
   const TEXT_EXTS = ['txt', 'md', 'rtf', 'csv', 'json', 'xml', 'yaml', 'yml', 'toml', 'ini', 'cfg', 'log',
     'rs', 'py', 'js', 'ts', 'jsx', 'tsx', 'go', 'c', 'cpp', 'h', 'hpp', 'java', 'rb', 'php',
     'sh', 'bash', 'zsh', 'fish', 'html', 'css', 'scss', 'less', 'sql', 'svelte', 'vue'];
+
+  const CODE_EXTS = ['rs', 'py', 'js', 'ts', 'jsx', 'tsx', 'go', 'c', 'cpp', 'h', 'hpp', 'java', 'rb', 'php',
+    'sh', 'bash', 'zsh', 'html', 'css', 'scss', 'less', 'sql', 'svelte', 'vue', 'json', 'yaml', 'yml', 'toml'];
 
   $: if (entry && visible) loadPreview(entry);
 
@@ -35,8 +39,13 @@
     return !!e.extension && TEXT_EXTS.includes(e.extension.toLowerCase());
   }
 
+  function isCode(e: FileEntry): boolean {
+    return !!e.extension && CODE_EXTS.includes(e.extension.toLowerCase());
+  }
+
   async function loadPreview(e: FileEntry) {
     content = '';
+    highlightedHtml = '';
     imageDataUri = '';
     if (e.is_dir) return;
     loading = true;
@@ -44,6 +53,8 @@
     try {
       if (isImage(e)) {
         imageDataUri = await invoke<string>('get_thumbnail', { path: e.path });
+      } else if (isCode(e)) {
+        highlightedHtml = await invoke<string>('highlight_code', { path: e.path });
       } else if (isText(e)) {
         content = await invoke<string>('read_file_preview', { path: e.path });
       }
@@ -79,6 +90,8 @@
         <div class="preview-placeholder">Directory</div>
       {:else if imageDataUri}
         <img class="preview-image" src={imageDataUri} alt={entry.filename} />
+      {:else if highlightedHtml}
+        <div class="preview-code">{@html highlightedHtml}</div>
       {:else if content}
         <pre class="preview-text">{content}</pre>
       {:else}
@@ -155,6 +168,21 @@
     white-space: pre-wrap;
     word-break: break-all;
     tab-size: 4;
+  }
+
+  .preview-code {
+    width: 100%;
+    overflow: auto;
+    font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    tab-size: 4;
+  }
+
+  .preview-code :global(pre) {
+    margin: 0;
+    padding: 8px;
+    border-radius: 4px;
   }
 
   .preview-placeholder, .preview-loading {

@@ -7,6 +7,7 @@ use noema_core::config::AppConfig;
 use noema_core::db::Database;
 use noema_core::events::{AppEvent, EventBus};
 use noema_core::types::{FileEntry, SortDirection, SortField, SortOrder};
+use noema_fs::highlight::Highlighter;
 use noema_fs::ops::FileOpsEngine;
 use noema_fs::thumbs::ThumbnailService;
 use serde::Serialize;
@@ -15,6 +16,7 @@ use tauri::{Emitter, State};
 struct AppState {
     fs_engine: Arc<FileOpsEngine>,
     thumb_service: Arc<ThumbnailService>,
+    highlighter: Arc<Highlighter>,
     event_bus: Arc<EventBus>,
     db: Arc<Database>,
 }
@@ -214,6 +216,22 @@ async fn check_conflicts(
 }
 
 #[tauri::command]
+async fn highlight_code(
+    path: String,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    let path = PathBuf::from(&path);
+    let highlighter = state.highlighter.clone();
+    tokio::task::spawn_blocking(move || {
+        let content = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+        let truncated = if content.len() > 10240 { &content[..10240] } else { &content };
+        highlighter.highlight(&path, truncated).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
 async fn read_file_preview(
     path: String,
     max_bytes: Option<usize>,
@@ -354,10 +372,12 @@ fn main() {
         ThumbnailService::new(data_dir.join("thumbs"), 128)
             .expect("Failed to create thumbnail service")
     );
+    let highlighter = Arc::new(Highlighter::new());
 
     let app_state = AppState {
         fs_engine,
         thumb_service,
+        highlighter,
         event_bus: event_bus.clone(),
         db,
     };
@@ -417,6 +437,7 @@ fn main() {
             load_workspace,
             get_thumbnail,
             read_file_preview,
+            highlight_code,
         ])
         .run(tauri::generate_context!())
         .expect("error running Noema");
