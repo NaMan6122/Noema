@@ -13,6 +13,7 @@
 
   let favorites: FavoriteEntry[] = [];
   let volumes: FavoriteEntry[] = [];
+  let recents: FavoriteEntry[] = [];
 
   const favoriteIcons: Record<string, string> = {
     Home: '🏠',
@@ -32,6 +33,9 @@
     } catch (e) {
       console.error('Failed to load favorites:', e);
     }
+    try {
+      recents = await invoke<FavoriteEntry[]>('get_recent_files');
+    } catch (_) {}
   });
 
   function isActive(path: string): boolean {
@@ -71,14 +75,31 @@
       {/each}
     </section>
   {/if}
+
+  {#if recents.length > 0}
+    <section>
+      <h3>Recents</h3>
+      {#each recents as rec}
+        <button
+          class="sidebar-item"
+          class:active={isActive(rec.path)}
+          on:click={() => onNavigate(rec.path)}
+          title={rec.path}
+        >
+          <span class="sidebar-icon">🕐</span>
+          <span class="sidebar-label">{rec.name}</span>
+        </button>
+      {/each}
+    </section>
+  {/if}
 </nav>
 
 <style>
   .sidebar {
     width: 200px;
     min-width: 200px;
-    background: #181825;
-    border-right: 1px solid #313244;
+    background: var(--bg-mantle);
+    border-right: 1px solid var(--bg-surface0);
     overflow-y: auto;
     padding: 8px 0;
     display: flex;
@@ -94,7 +115,7 @@
     font-size: 10px;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    color: #6c7086;
+    color: var(--text-muted);
     margin: 8px 4px 4px;
     font-weight: 600;
   }
@@ -108,19 +129,19 @@
     border: none;
     border-radius: 4px;
     background: none;
-    color: #cdd6f4;
+    color: var(--text-primary);
     font-size: 13px;
     cursor: pointer;
     text-align: left;
   }
 
   .sidebar-item:hover {
-    background: #313244;
+    background: var(--bg-surface0);
   }
 
   .sidebar-item.active {
-    background: #45475a;
-    color: #89b4fa;
+    background: var(--bg-surface1);
+    color: var(--accent-blue);
   }
 
   .sidebar-icon {

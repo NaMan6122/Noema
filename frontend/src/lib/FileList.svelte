@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { invoke } from '@tauri-apps/api/core';
   import { onMount, tick } from 'svelte';
 
   interface FileEntry {
@@ -17,6 +18,7 @@
   export let selectedPaths: Set<string>;
   export let sortField: string;
   export let sortDirection: string;
+  export let viewMode: 'list' | 'grid' = 'list';
   export let renamingPath: string;
   export let renameValue: string;
   export let dragOverPath: string;
@@ -42,6 +44,26 @@
   let focusIndex = -1;
   let typeAheadBuffer = '';
   let typeAheadTimer: ReturnType<typeof setTimeout> | null = null;
+
+  let thumbnails: Record<string, string> = {};
+  const IMAGE_EXTS = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+
+  function isImage(entry: FileEntry): boolean {
+    return !entry.is_dir && !!entry.extension && IMAGE_EXTS.includes(entry.extension.toLowerCase());
+  }
+
+  async function loadThumbnail(entry: FileEntry) {
+    if (thumbnails[entry.path] !== undefined) return;
+    thumbnails[entry.path] = '';
+    try {
+      const dataUri = await invoke<string>('get_thumbnail', { path: entry.path });
+      thumbnails = { ...thumbnails, [entry.path]: dataUri };
+    } catch (_) {}
+  }
+
+  $: if (viewMode === 'grid') {
+    entries.filter(isImage).forEach(loadThumbnail);
+  }
 
   $: totalHeight = entries.length * ROW_HEIGHT;
   $: startIndex = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - BUFFER);
@@ -105,14 +127,6 @@
         e.preventDefault();
         if (focusIndex >= 0 && focusIndex < entries.length) {
           onOpen(entries[focusIndex]);
-        }
-        break;
-      case ' ':
-        e.preventDefault();
-        if (focusIndex >= 0 && focusIndex < entries.length) {
-          const entry = entries[focusIndex];
-          const fakeEvent = { metaKey: true, ctrlKey: false, shiftKey: false } as MouseEvent;
-          onSelect(entry, focusIndex, fakeEvent);
         }
         break;
       case 'Home':
@@ -198,30 +212,69 @@
   on:keydown={handleKeydown}
   tabindex="-1"
 >
-  <div class="list-header">
-    <div class="col-icon"></div>
-    <div class="col-name" on:click={() => onToggleSort('name')}>
-      Name{sortIndicator('name')}
+  {#if viewMode === 'list'}
+    <div class="list-header">
+      <div class="col-icon"></div>
+      <div class="col-name" on:click={() => onToggleSort('name')}>
+        Name{sortIndicator('name')}
+      </div>
+      <div class="col-size" on:click={() => onToggleSort('size')}>
+        Size{sortIndicator('size')}
+      </div>
+      <div class="col-modified" on:click={() => onToggleSort('modified')}>
+        Modified{sortIndicator('modified')}
+      </div>
     </div>
-    <div class="col-size" on:click={() => onToggleSort('size')}>
-      Size{sortIndicator('size')}
-    </div>
-    <div class="col-modified" on:click={() => onToggleSort('modified')}>
-      Modified{sortIndicator('modified')}
-    </div>
-  </div>
 
-  <div class="virtual-scroller" style="height: {totalHeight}px; position: relative;">
-    <div style="position: absolute; top: {offsetY}px; left: 0; right: 0;">
-      {#each visibleEntries as entry, vi}
-        {@const i = startIndex + vi}
+    <div class="virtual-scroller" style="height: {totalHeight}px; position: relative;">
+      <div style="position: absolute; top: {offsetY}px; left: 0; right: 0;">
+        {#each visibleEntries as entry, vi}
+          {@const i = startIndex + vi}
+          <div
+            class="list-row"
+            class:is-dir={entry.is_dir}
+            class:selected={selectedPaths.has(entry.path)}
+            class:focused={focusIndex === i}
+            class:drag-over={dragOverPath === entry.path}
+            style="height: {ROW_HEIGHT}px;"
+            draggable="true"
+            on:dragstart={(e) => onDragStart(e, entry)}
+            on:dragover={(e) => onDragOver(e, entry)}
+            on:dragleave={onDragLeave}
+            on:drop={(e) => onDrop(e, entry)}
+            on:click={(e) => { focusIndex = i; onSelect(entry, i, e); }}
+            on:dblclick={() => onOpen(entry)}
+            on:contextmenu|stopPropagation={(e) => onContextMenu(e, entry)}
+          >
+            <div class="col-icon">{getIcon(entry)}</div>
+            <div class="col-name">
+              {#if renamingPath === entry.path}
+                <input
+                  class="rename-input"
+                  type="text"
+                  bind:value={renameValue}
+                  on:blur={onCommitRename}
+                  on:keydown={(e) => { if (e.key === 'Enter') onCommitRename(); if (e.key === 'Escape') onCancelRename(); }}
+                  autofocus
+                />
+              {:else}
+                {entry.filename}
+              {/if}
+            </div>
+            <div class="col-size">{entry.is_dir ? '—' : formatSize(entry.size)}</div>
+            <div class="col-modified">{formatDate(entry.modified)}</div>
+          </div>
+        {/each}
+      </div>
+    </div>
+  {:else}
+    <div class="grid-view">
+      {#each entries as entry, i}
         <div
-          class="list-row"
-          class:is-dir={entry.is_dir}
+          class="grid-cell"
           class:selected={selectedPaths.has(entry.path)}
           class:focused={focusIndex === i}
           class:drag-over={dragOverPath === entry.path}
-          style="height: {ROW_HEIGHT}px;"
           draggable="true"
           on:dragstart={(e) => onDragStart(e, entry)}
           on:dragover={(e) => onDragOver(e, entry)}
@@ -231,8 +284,14 @@
           on:dblclick={() => onOpen(entry)}
           on:contextmenu|stopPropagation={(e) => onContextMenu(e, entry)}
         >
-          <div class="col-icon">{getIcon(entry)}</div>
-          <div class="col-name">
+          <div class="grid-icon">
+            {#if isImage(entry) && thumbnails[entry.path]}
+              <img class="grid-thumb" src={thumbnails[entry.path]} alt={entry.filename} />
+            {:else}
+              {getIcon(entry)}
+            {/if}
+          </div>
+          <div class="grid-name">
             {#if renamingPath === entry.path}
               <input
                 class="rename-input"
@@ -246,12 +305,10 @@
               {entry.filename}
             {/if}
           </div>
-          <div class="col-size">{entry.is_dir ? '—' : formatSize(entry.size)}</div>
-          <div class="col-modified">{formatDate(entry.modified)}</div>
         </div>
       {/each}
     </div>
-  </div>
+  {/if}
 
   {#if entries.length === 0}
     <div class="empty">Empty directory</div>
@@ -273,10 +330,10 @@
     display: grid;
     grid-template-columns: 32px 1fr 90px 120px;
     padding: 6px 12px;
-    background: #181825;
-    border-bottom: 1px solid #313244;
+    background: var(--bg-mantle);
+    border-bottom: 1px solid var(--bg-surface0);
     font-weight: 600;
-    color: #a6adc8;
+    color: var(--text-subtext);
     font-size: 11px;
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -291,28 +348,28 @@
     display: grid;
     grid-template-columns: 32px 1fr 90px 120px;
     padding: 0 12px;
-    border-bottom: 1px solid #31324420;
+    border-bottom: 1px solid var(--bg-surface0)20;
     cursor: default;
     align-items: center;
     box-sizing: border-box;
   }
 
   .list-row:hover {
-    background: #313244;
+    background: var(--bg-surface0);
   }
 
   .list-row.selected {
-    background: #45475a;
+    background: var(--bg-surface1);
   }
 
   .list-row.focused {
-    outline: 1px solid #89b4fa;
+    outline: 1px solid var(--accent-blue);
     outline-offset: -1px;
   }
 
   .list-row.drag-over {
-    background: #89b4fa20;
-    outline: 1px dashed #89b4fa;
+    background: var(--accent-blue)20;
+    outline: 1px dashed var(--accent-blue);
     outline-offset: -1px;
   }
 
@@ -333,7 +390,7 @@
   }
 
   .col-size, .col-modified {
-    color: #a6adc8;
+    color: var(--text-subtext);
     font-size: 12px;
     text-align: right;
   }
@@ -341,17 +398,79 @@
   .empty {
     padding: 40px;
     text-align: center;
-    color: #6c7086;
+    color: var(--text-muted);
   }
 
   .rename-input {
     width: 100%;
     padding: 1px 4px;
-    border: 1px solid #89b4fa;
+    border: 1px solid var(--accent-blue);
     border-radius: 3px;
-    background: #1e1e2e;
-    color: #cdd6f4;
+    background: var(--bg-base);
+    color: var(--text-primary);
     font-size: 13px;
     outline: none;
+  }
+
+  .grid-view {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 4px;
+    padding: 12px;
+  }
+
+  .grid-cell {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 12px 8px 8px;
+    border-radius: 6px;
+    cursor: default;
+    user-select: none;
+  }
+
+  .grid-cell:hover {
+    background: var(--bg-surface0);
+  }
+
+  .grid-cell.selected {
+    background: var(--bg-surface1);
+  }
+
+  .grid-cell.focused {
+    outline: 1px solid var(--accent-blue);
+    outline-offset: -1px;
+  }
+
+  .grid-cell.drag-over {
+    background: var(--accent-blue)20;
+    outline: 1px dashed var(--accent-blue);
+  }
+
+  .grid-icon {
+    font-size: 40px;
+    margin-bottom: 6px;
+    width: 64px;
+    height: 64px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .grid-thumb {
+    max-width: 64px;
+    max-height: 64px;
+    border-radius: 4px;
+    object-fit: cover;
+  }
+
+  .grid-name {
+    font-size: 11px;
+    text-align: center;
+    word-break: break-all;
+    line-height: 1.3;
+    max-height: 2.6em;
+    overflow: hidden;
+    width: 100%;
   }
 </style>

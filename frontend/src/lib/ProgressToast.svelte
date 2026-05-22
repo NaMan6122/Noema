@@ -104,46 +104,46 @@
   }
 
   .toast {
-    background: #313244;
-    border: 1px solid #45475a;
+    background: var(--bg-surface0);
+    border: 1px solid var(--bg-surface1);
     border-radius: 8px;
     padding: 10px 14px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    box-shadow: 0 4px 12px var(--shadow);
   }
 
   .toast.error {
-    border-color: #f38ba8;
+    border-color: var(--accent-red);
   }
 
   .toast-header {
     display: flex;
     justify-content: space-between;
     font-size: 12px;
-    color: #cdd6f4;
+    color: var(--text-primary);
     margin-bottom: 6px;
   }
 
   .percent {
-    color: #a6adc8;
+    color: var(--text-subtext);
   }
 
   .progress-bar {
     height: 4px;
-    background: #45475a;
+    background: var(--bg-surface1);
     border-radius: 2px;
     overflow: hidden;
   }
 
   .progress-fill {
     height: 100%;
-    background: #89b4fa;
+    background: var(--accent-blue);
     transition: width 0.2s;
   }
 
   .current-file {
     margin-top: 4px;
     font-size: 11px;
-    color: #6c7086;
+    color: var(--text-muted);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -152,6 +152,6 @@
   .error-msg {
     margin-top: 4px;
     font-size: 11px;
-    color: #f38ba8;
+    color: var(--accent-red);
   }
 </style>

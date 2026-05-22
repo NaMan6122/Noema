@@ -7,6 +7,10 @@
   import FileList from './lib/FileList.svelte';
   import TabBar from './lib/TabBar.svelte';
   import CommandPalette from './lib/CommandPalette.svelte';
+  import PreviewPane from './lib/PreviewPane.svelte';
+  import InfoPanel from './lib/InfoPanel.svelte';
+  import SearchBar from './lib/SearchBar.svelte';
+  import GlobalSearch from './lib/GlobalSearch.svelte';
 
   interface FileEntry {
     path: string;
@@ -30,6 +34,7 @@
     historyIndex: number;
     sortField: string;
     sortDirection: string;
+    viewMode: 'list' | 'grid';
   }
 
   let tabs: TabState[] = [];
@@ -48,6 +53,41 @@
   // Context menu
   let contextMenu = { visible: false, x: 0, y: 0 };
 
+  // Preview pane
+  let previewVisible = false;
+
+  // Info panel
+  let infoVisible = false;
+
+  // Search filter
+  let searchVisible = false;
+  let searchQuery = '';
+
+  // Global search
+  let globalSearchVisible = false;
+
+  // Disk space
+  let diskInfo: { total: number; available: number; used: number } | null = null;
+
+  function formatSize(bytes: number): string {
+    if (bytes >= 1e12) return (bytes / 1e12).toFixed(1) + ' TB';
+    if (bytes >= 1e9) return (bytes / 1e9).toFixed(1) + ' GB';
+    if (bytes >= 1e6) return (bytes / 1e6).toFixed(1) + ' MB';
+    if (bytes >= 1e3) return (bytes / 1e3).toFixed(1) + ' KB';
+    return bytes + ' B';
+  }
+
+  // Theme
+  let theme: 'dark' | 'light' | 'auto' = 'auto';
+  function cycleTheme() {
+    const order: Array<'auto' | 'dark' | 'light'> = ['auto', 'dark', 'light'];
+    theme = order[(order.indexOf(theme) + 1) % 3];
+    document.documentElement.setAttribute('data-theme', theme);
+  }
+  $: if (typeof document !== 'undefined') {
+    document.documentElement.setAttribute('data-theme', theme);
+  }
+
   // Command palette
   let paletteVisible = false;
 
@@ -63,6 +103,8 @@
     { id: 'new-file', label: 'New File', action: handleNewFile },
     { id: 'undo', label: 'Undo', shortcut: 'Cmd+Z', action: handleUndo },
     { id: 'redo', label: 'Redo', shortcut: 'Cmd+Shift+Z', action: handleRedo },
+    { id: 'theme', label: `Theme: ${theme} → cycle`, action: cycleTheme },
+    { id: 'terminal', label: 'Open in Terminal', action: () => invoke('open_in_terminal', { path: currentPath }) },
   ];
 
   async function dirs(name: string) {
@@ -82,10 +124,15 @@
 
   $: activeTab = tabs.find(t => t.id === activeTabId);
   $: currentPath = activeTab?.path ?? '';
-  $: entries = activeTab?.entries ?? [];
+  $: rawEntries = activeTab?.entries ?? [];
+  $: entries = searchQuery
+    ? rawEntries.filter(e => e.filename.toLowerCase().includes(searchQuery.toLowerCase()))
+    : rawEntries;
   $: selectedPaths = activeTab?.selectedPaths ?? new Set<string>();
   $: sortField = activeTab?.sortField ?? 'name';
   $: sortDirection = activeTab?.sortDirection ?? 'asc';
+  $: viewMode = activeTab?.viewMode ?? 'list';
+  $: selectedEntry = selectedPaths.size === 1 ? entries.find(e => selectedPaths.has(e.path)) ?? null : null;
   $: tabBarData = tabs.map(t => ({ id: t.id, path: t.path, title: t.title }));
 
   function genId(): string {
@@ -120,6 +167,7 @@
         historyIndex: -1,
         sortField: t.sortField || 'name',
         sortDirection: t.sortDirection || 'asc',
+        viewMode: (t as any).viewMode || 'list',
       }));
       activeTabId = tabs[0].id;
       await loadDirectory(tabs[0].path);
@@ -136,6 +184,7 @@
         historyIndex: -1,
         sortField: 'name',
         sortDirection: 'asc',
+        viewMode: 'list',
       }];
       activeTabId = id;
       await loadDirectory(home);
@@ -154,6 +203,7 @@
       path: t.path,
       sortField: t.sortField,
       sortDirection: t.sortDirection,
+      viewMode: t.viewMode,
     }));
     invoke('save_workspace', { name: 'last_session', stateJson: JSON.stringify(state) }).catch(() => {});
   }
@@ -190,6 +240,7 @@
       error = String(e);
     }
     loading = false;
+    invoke<{ total: number; available: number; used: number }>('get_disk_space', { path }).then(info => { diskInfo = info; }).catch(() => {});
   }
 
   function navigateTo(path: string) {
@@ -242,6 +293,8 @@
   function openEntry(entry: FileEntry) {
     if (entry.is_dir) {
       navigateTo(entry.path);
+    } else {
+      invoke('log_file_open', { path: entry.path }).catch(() => {});
     }
   }
 
@@ -289,6 +342,7 @@
       historyIndex: -1,
       sortField: 'name',
       sortDirection: 'asc',
+      viewMode: 'list',
     }];
     activeTabId = id;
     loadDirectory(path);
@@ -485,7 +539,10 @@
   function handleKeydown(e: KeyboardEvent) {
     if (renamingPath || editingPath) return;
 
-    if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'p') {
+      e.preventDefault();
+      globalSearchVisible = !globalSearchVisible;
+    } else if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
       e.preventDefault();
       paletteVisible = !paletteVisible;
     } else if ((e.metaKey || e.ctrlKey) && e.key === 't') {
@@ -494,7 +551,13 @@
     } else if ((e.metaKey || e.ctrlKey) && e.key === 'w') {
       e.preventDefault();
       closeTab(activeTabId);
-    } else if ((e.metaKey || e.ctrlKey) && e.key >= '1' && e.key <= '9') {
+    } else if ((e.metaKey || e.ctrlKey) && e.key === '1') {
+      e.preventDefault();
+      updateActiveTab({ viewMode: 'list' });
+    } else if ((e.metaKey || e.ctrlKey) && e.key === '2') {
+      e.preventDefault();
+      updateActiveTab({ viewMode: 'grid' });
+    } else if ((e.metaKey || e.ctrlKey) && e.key >= '3' && e.key <= '9') {
       e.preventDefault();
       const idx = parseInt(e.key) - 1;
       if (idx < tabs.length) activeTabId = tabs[idx].id;
@@ -509,8 +572,18 @@
     } else if (e.key === 'z' && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
       handleUndo();
+    } else if ((e.metaKey || e.ctrlKey) && e.key === 'i') {
+      e.preventDefault();
+      infoVisible = !infoVisible;
+    } else if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
+      e.preventDefault();
+      searchVisible = !searchVisible;
+      if (!searchVisible) searchQuery = '';
     } else if (e.key === 'Delete' || (e.key === 'Backspace' && e.metaKey)) {
       handleDelete();
+    } else if (e.key === ' ' && !e.metaKey && !e.ctrlKey) {
+      e.preventDefault();
+      previewVisible = !previewVisible;
     }
   }
 </script>
@@ -558,6 +631,9 @@
       {/if}
     </div>
     <div class="actions">
+      <button class="view-toggle" on:click={() => updateActiveTab({ viewMode: viewMode === 'list' ? 'grid' : 'list' })} title={viewMode === 'list' ? 'Grid view (Cmd+2)' : 'List view (Cmd+1)'}>
+        {viewMode === 'list' ? '⊞' : '☰'}
+      </button>
       <label>
         <input type="checkbox" bind:checked={showHidden} on:change={() => loadDirectory(currentPath)} />
         Hidden
@@ -573,6 +649,11 @@
     <Sidebar {currentPath} onNavigate={navigateTo} />
 
     <div class="content-area">
+      <SearchBar
+        visible={searchVisible}
+        bind:query={searchQuery}
+        onClose={() => { searchVisible = false; searchQuery = ''; }}
+      />
       {#if loading}
         <div class="loading">Loading...</div>
       {:else}
@@ -581,6 +662,7 @@
           {selectedPaths}
           {sortField}
           {sortDirection}
+          {viewMode}
           {renamingPath}
           bind:renameValue
           {dragOverPath}
@@ -597,6 +679,8 @@
         />
       {/if}
     </div>
+
+    <PreviewPane entry={selectedEntry} visible={previewVisible} />
   </div>
 
   {#if contextMenu.visible}
@@ -608,13 +692,18 @@
       {/if}
       <button on:click={handleNewFolder}>New Folder</button>
       <button on:click={handleNewFile}>New File</button>
+      <hr />
+      <button on:click={() => { invoke('open_in_terminal', { path: currentPath }); closeContextMenu(); }}>Open in Terminal</button>
     </div>
   {/if}
 
   <footer class="status-bar">
     <span>{selectedPaths.size > 0 ? `${selectedPaths.size} selected` : `${entries.length} items`}</span>
+    <span>{diskInfo ? `${formatSize(diskInfo.available)} free of ${formatSize(diskInfo.total)}` : ''}</span>
     <span>{currentPath}</span>
   </footer>
+
+  <InfoPanel path={selectedPaths.size === 1 ? [...selectedPaths][0] : null} bind:visible={infoVisible} />
 
   <ProgressToast />
 
@@ -623,15 +712,75 @@
     commands={paletteCommands}
     onClose={() => paletteVisible = false}
   />
+
+  <GlobalSearch
+    visible={globalSearchVisible}
+    {currentPath}
+    onNavigate={navigateTo}
+    onClose={() => globalSearchVisible = false}
+  />
 </div>
 
 <style>
+  :global(:root) {
+    --bg-base: #1e1e2e;
+    --bg-mantle: #181825;
+    --bg-crust: #11111b;
+    --bg-surface0: #313244;
+    --bg-surface1: #45475a;
+    --text-body: #e0e0e0;
+    --text-primary: #cdd6f4;
+    --text-subtext: #a6adc8;
+    --text-muted: #6c7086;
+    --accent-blue: #89b4fa;
+    --accent-sapphire: #74c7ec;
+    --accent-red: #f38ba8;
+    --shadow: rgba(0, 0, 0, 0.4);
+    --overlay: rgba(0, 0, 0, 0.5);
+  }
+
+  @media (prefers-color-scheme: light) {
+    :global(:root[data-theme="auto"]) {
+      --bg-base: #eff1f5;
+      --bg-mantle: #e6e9ef;
+      --bg-crust: #dce0e8;
+      --bg-surface0: #ccd0da;
+      --bg-surface1: #bcc0cc;
+      --text-body: #4c4f69;
+      --text-primary: #4c4f69;
+      --text-subtext: #5c5f77;
+      --text-muted: #8c8fa1;
+      --accent-blue: #1e66f5;
+      --accent-sapphire: #209fb5;
+      --accent-red: #d20f39;
+      --shadow: rgba(0, 0, 0, 0.15);
+      --overlay: rgba(0, 0, 0, 0.3);
+    }
+  }
+
+  :global(:root[data-theme="light"]) {
+    --bg-base: #eff1f5;
+    --bg-mantle: #e6e9ef;
+    --bg-crust: #dce0e8;
+    --bg-surface0: #ccd0da;
+    --bg-surface1: #bcc0cc;
+    --text-body: #4c4f69;
+    --text-primary: #4c4f69;
+    --text-subtext: #5c5f77;
+    --text-muted: #8c8fa1;
+    --accent-blue: #1e66f5;
+    --accent-sapphire: #209fb5;
+    --accent-red: #d20f39;
+    --shadow: rgba(0, 0, 0, 0.15);
+    --overlay: rgba(0, 0, 0, 0.3);
+  }
+
   :global(body) {
     margin: 0;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     font-size: 13px;
-    color: #e0e0e0;
-    background: #1e1e2e;
+    color: var(--text-body);
+    background: var(--bg-base);
     overflow: hidden;
   }
 
@@ -646,8 +795,8 @@
     align-items: center;
     gap: 8px;
     padding: 8px 12px;
-    background: #181825;
-    border-bottom: 1px solid #313244;
+    background: var(--bg-mantle);
+    border-bottom: 1px solid var(--bg-surface0);
     -webkit-app-region: drag;
   }
 
@@ -659,21 +808,35 @@
 
   .nav-buttons button {
     padding: 4px 10px;
-    border: 1px solid #45475a;
+    border: 1px solid var(--bg-surface1);
     border-radius: 4px;
-    background: #313244;
-    color: #cdd6f4;
+    background: var(--bg-surface0);
+    color: var(--text-primary);
     cursor: pointer;
     font-size: 14px;
   }
 
   .nav-buttons button:hover:not(:disabled) {
-    background: #45475a;
+    background: var(--bg-surface1);
   }
 
   .nav-buttons button:disabled {
     opacity: 0.4;
     cursor: default;
+  }
+
+  .view-toggle {
+    padding: 4px 8px;
+    border: 1px solid var(--bg-surface1);
+    border-radius: 4px;
+    background: var(--bg-surface0);
+    color: var(--text-primary);
+    cursor: pointer;
+    font-size: 14px;
+  }
+
+  .view-toggle:hover {
+    background: var(--bg-surface1);
   }
 
   .breadcrumb {
@@ -685,10 +848,10 @@
   .path-input {
     width: 100%;
     padding: 5px 10px;
-    border: 1px solid #45475a;
+    border: 1px solid var(--bg-surface1);
     border-radius: 4px;
-    background: #1e1e2e;
-    color: #cdd6f4;
+    background: var(--bg-base);
+    color: var(--text-primary);
     font-size: 12px;
     font-family: 'SF Mono', Monaco, monospace;
     box-sizing: border-box;
@@ -696,7 +859,7 @@
 
   .path-input:focus {
     outline: none;
-    border-color: #89b4fa;
+    border-color: var(--accent-blue);
   }
 
   .breadcrumb-segments {
@@ -704,7 +867,7 @@
     align-items: center;
     padding: 4px 8px;
     border-radius: 4px;
-    background: #1e1e2e;
+    background: var(--bg-base);
     border: 1px solid transparent;
     min-height: 28px;
     overflow: hidden;
@@ -712,13 +875,13 @@
   }
 
   .breadcrumb-segments:hover {
-    border-color: #45475a;
+    border-color: var(--bg-surface1);
   }
 
   .breadcrumb-link {
     border: none;
     background: none;
-    color: #89b4fa;
+    color: var(--accent-blue);
     cursor: pointer;
     padding: 2px 4px;
     border-radius: 3px;
@@ -727,18 +890,18 @@
   }
 
   .breadcrumb-link:hover {
-    background: #313244;
+    background: var(--bg-surface0);
     text-decoration: underline;
   }
 
   .breadcrumb-sep {
-    color: #6c7086;
+    color: var(--text-muted);
     margin: 0 1px;
     font-size: 12px;
   }
 
   .breadcrumb-current {
-    color: #cdd6f4;
+    color: var(--text-primary);
     font-weight: 500;
     font-size: 12px;
     padding: 2px 4px;
@@ -750,15 +913,15 @@
     align-items: center;
     gap: 8px;
     -webkit-app-region: no-drag;
-    color: #a6adc8;
+    color: var(--text-subtext);
     font-size: 12px;
   }
 
   .error {
     padding: 8px 12px;
-    background: #f38ba820;
-    color: #f38ba8;
-    border-bottom: 1px solid #f38ba840;
+    background: color-mix(in srgb, var(--accent-red) 12%, transparent);
+    color: var(--accent-red);
+    border-bottom: 1px solid color-mix(in srgb, var(--accent-red) 25%, transparent);
   }
 
   .main-content {
@@ -777,27 +940,27 @@
   .loading {
     padding: 40px;
     text-align: center;
-    color: #6c7086;
+    color: var(--text-muted);
   }
 
   .status-bar {
     display: flex;
     justify-content: space-between;
     padding: 4px 12px;
-    background: #181825;
-    border-top: 1px solid #313244;
-    color: #6c7086;
+    background: var(--bg-mantle);
+    border-top: 1px solid var(--bg-surface0);
+    color: var(--text-muted);
     font-size: 11px;
   }
 
   .context-menu {
     position: fixed;
-    background: #313244;
-    border: 1px solid #45475a;
+    background: var(--bg-surface0);
+    border: 1px solid var(--bg-surface1);
     border-radius: 6px;
     padding: 4px 0;
     min-width: 160px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    box-shadow: 0 4px 12px var(--shadow);
     z-index: 1000;
   }
 
@@ -807,24 +970,24 @@
     padding: 6px 14px;
     border: none;
     background: none;
-    color: #cdd6f4;
+    color: var(--text-primary);
     font-size: 13px;
     text-align: left;
     cursor: pointer;
   }
 
   .context-menu button:hover:not(:disabled) {
-    background: #45475a;
+    background: var(--bg-surface1);
   }
 
   .context-menu button:disabled {
-    color: #6c7086;
+    color: var(--text-muted);
     cursor: default;
   }
 
   .context-menu hr {
     border: none;
-    border-top: 1px solid #45475a;
+    border-top: 1px solid var(--bg-surface1);
     margin: 4px 0;
   }
 </style>

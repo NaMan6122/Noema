@@ -7,12 +7,16 @@ use noema_core::config::AppConfig;
 use noema_core::db::Database;
 use noema_core::events::{AppEvent, EventBus};
 use noema_core::types::{FileEntry, SortDirection, SortField, SortOrder};
+use noema_fs::highlight::Highlighter;
 use noema_fs::ops::FileOpsEngine;
+use noema_fs::thumbs::ThumbnailService;
 use serde::Serialize;
 use tauri::{Emitter, State};
 
 struct AppState {
     fs_engine: Arc<FileOpsEngine>,
+    thumb_service: Arc<ThumbnailService>,
+    highlighter: Arc<Highlighter>,
     event_bus: Arc<EventBus>,
     db: Arc<Database>,
 }
@@ -211,6 +215,240 @@ async fn check_conflicts(
     Ok(conflicts)
 }
 
+#[derive(Serialize)]
+struct FileInfoDto {
+    path: String,
+    filename: String,
+    size: u64,
+    created: String,
+    modified: String,
+    is_dir: bool,
+    is_symlink: bool,
+    permissions: String,
+    extension: Option<String>,
+}
+
+#[tauri::command]
+async fn log_file_open(
+    path: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let conn = state.db.connection().map_err(|e| e.to_string())?;
+    let now = chrono::Utc::now().to_rfc3339();
+    conn.execute(
+        "INSERT INTO recent_paths (path, accessed_at) VALUES (?1, ?2)
+         ON CONFLICT(path) DO UPDATE SET accessed_at = ?2",
+        rusqlite::params![path, now],
+    ).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn get_recent_files(
+    state: State<'_, AppState>,
+) -> Result<Vec<FavoriteEntry>, String> {
+    let conn = state.db.connection().map_err(|e| e.to_string())?;
+    let mut stmt = conn.prepare(
+        "SELECT path FROM recent_paths ORDER BY accessed_at DESC LIMIT 20"
+    ).map_err(|e| e.to_string())?;
+    let paths: Vec<String> = stmt.query_map([], |row| row.get(0))
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+    Ok(paths.into_iter().filter_map(|p| {
+        let path = std::path::Path::new(&p);
+        let name = path.file_name()?.to_string_lossy().to_string();
+        Some(FavoriteEntry { name, path: p, kind: "recent".to_string() })
+    }).collect())
+}
+
+#[tauri::command]
+async fn open_in_terminal(path: String) -> Result<(), String> {
+    let dir = if std::path::Path::new(&path).is_dir() {
+        path
+    } else {
+        std::path::Path::new(&path)
+            .parent()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_else(|| "/".to_string())
+    };
+
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .args(["-a", "Terminal", &dir])
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let terminals = ["x-terminal-emulator", "gnome-terminal", "konsole", "xterm"];
+        let mut launched = false;
+        for term in &terminals {
+            if std::process::Command::new(term)
+                .current_dir(&dir)
+                .spawn()
+                .is_ok()
+            {
+                launched = true;
+                break;
+            }
+        }
+        if !launched {
+            return Err("No terminal emulator found".to_string());
+        }
+    }
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("cmd")
+            .args(["/c", "start", "cmd", "/k", &format!("cd /d {}", dir)])
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[derive(Serialize)]
+struct DiskSpaceInfo {
+    total: u64,
+    available: u64,
+    used: u64,
+}
+
+#[tauri::command]
+async fn get_disk_space(path: String) -> Result<DiskSpaceInfo, String> {
+    let path = PathBuf::from(&path);
+    let meta = fs2::statvfs(&path).map_err(|e| e.to_string())?;
+    let total = meta.total_space();
+    let available = meta.available_space();
+    Ok(DiskSpaceInfo {
+        total,
+        available,
+        used: total.saturating_sub(available),
+    })
+}
+
+#[tauri::command]
+async fn search_files(
+    root: String,
+    query: String,
+    limit: Option<usize>,
+) -> Result<Vec<FileEntryDto>, String> {
+    let root = PathBuf::from(&root);
+    let limit = limit.unwrap_or(100);
+    let query_lower = query.to_lowercase();
+
+    tokio::task::spawn_blocking(move || {
+        let mut results = Vec::new();
+        for entry in walkdir::WalkDir::new(&root)
+            .max_depth(8)
+            .into_iter()
+            .filter_map(|e| e.ok())
+        {
+            let name = entry.file_name().to_string_lossy();
+            if name.to_lowercase().contains(&query_lower) {
+                if let Ok(meta) = entry.metadata() {
+                    let created = meta.created()
+                        .map(chrono::DateTime::<chrono::Utc>::from)
+                        .unwrap_or_default();
+                    let modified = meta.modified()
+                        .map(chrono::DateTime::<chrono::Utc>::from)
+                        .unwrap_or_default();
+                    results.push(FileEntryDto {
+                        path: entry.path().to_string_lossy().to_string(),
+                        filename: name.to_string(),
+                        extension: entry.path().extension().map(|e| e.to_string_lossy().to_string()),
+                        size: meta.len(),
+                        created: created.to_rfc3339(),
+                        modified: modified.to_rfc3339(),
+                        is_dir: meta.is_dir(),
+                        is_hidden: name.starts_with('.'),
+                        is_symlink: entry.file_type().is_symlink(),
+                    });
+                    if results.len() >= limit { break; }
+                }
+            }
+        }
+        Ok::<_, String>(results)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn get_file_info(path: String) -> Result<FileInfoDto, String> {
+    let path = PathBuf::from(&path);
+    let meta = std::fs::metadata(&path).map_err(|e| e.to_string())?;
+    let symlink_meta = std::fs::symlink_metadata(&path).map_err(|e| e.to_string())?;
+
+    #[cfg(unix)]
+    let permissions = {
+        use std::os::unix::fs::PermissionsExt;
+        format!("{:o}", meta.permissions().mode() & 0o777)
+    };
+    #[cfg(not(unix))]
+    let permissions = if meta.permissions().readonly() { "readonly".to_string() } else { "read-write".to_string() };
+
+    Ok(FileInfoDto {
+        path: path.to_string_lossy().to_string(),
+        filename: path.file_name().unwrap_or_default().to_string_lossy().to_string(),
+        size: meta.len(),
+        created: meta.created().map(chrono::DateTime::<chrono::Utc>::from).unwrap_or_default().to_rfc3339(),
+        modified: meta.modified().map(chrono::DateTime::<chrono::Utc>::from).unwrap_or_default().to_rfc3339(),
+        is_dir: meta.is_dir(),
+        is_symlink: symlink_meta.file_type().is_symlink(),
+        permissions,
+        extension: path.extension().map(|e| e.to_string_lossy().to_string()),
+    })
+}
+
+#[tauri::command]
+async fn highlight_code(
+    path: String,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    let path = PathBuf::from(&path);
+    let highlighter = state.highlighter.clone();
+    tokio::task::spawn_blocking(move || {
+        let content = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+        let truncated = if content.len() > 10240 { &content[..10240] } else { &content };
+        highlighter.highlight(&path, truncated).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn read_file_preview(
+    path: String,
+    max_bytes: Option<usize>,
+) -> Result<String, String> {
+    let max = max_bytes.unwrap_or(10240);
+    let path = PathBuf::from(&path);
+    tokio::task::spawn_blocking(move || {
+        let bytes = std::fs::read(&path).map_err(|e| e.to_string())?;
+        let truncated = &bytes[..bytes.len().min(max)];
+        match String::from_utf8(truncated.to_vec()) {
+            Ok(s) => Ok(s),
+            Err(_) => Ok(String::from_utf8_lossy(truncated).to_string()),
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn get_thumbnail(
+    path: String,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    let path = PathBuf::from(&path);
+    if !ThumbnailService::is_supported(&path) {
+        return Err("Unsupported file type".to_string());
+    }
+    state.thumb_service.get_thumbnail(path).await.map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 async fn save_workspace(
     name: String,
@@ -317,9 +555,16 @@ fn main() {
 
     let event_bus = Arc::new(EventBus::new(1024));
     let fs_engine = Arc::new(FileOpsEngine::new(event_bus.clone()));
+    let thumb_service = Arc::new(
+        ThumbnailService::new(data_dir.join("thumbs"), 128)
+            .expect("Failed to create thumbnail service")
+    );
+    let highlighter = Arc::new(Highlighter::new());
 
     let app_state = AppState {
         fs_engine,
+        thumb_service,
+        highlighter,
         event_bus: event_bus.clone(),
         db,
     };
@@ -377,6 +622,15 @@ fn main() {
             check_conflicts,
             save_workspace,
             load_workspace,
+            get_thumbnail,
+            read_file_preview,
+            highlight_code,
+            get_file_info,
+            search_files,
+            log_file_open,
+            get_recent_files,
+            open_in_terminal,
+            get_disk_space,
         ])
         .run(tauri::generate_context!())
         .expect("error running Noema");
