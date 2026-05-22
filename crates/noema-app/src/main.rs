@@ -8,11 +8,13 @@ use noema_core::db::Database;
 use noema_core::events::{AppEvent, EventBus};
 use noema_core::types::{FileEntry, SortDirection, SortField, SortOrder};
 use noema_fs::ops::FileOpsEngine;
+use noema_fs::thumbs::ThumbnailService;
 use serde::Serialize;
 use tauri::{Emitter, State};
 
 struct AppState {
     fs_engine: Arc<FileOpsEngine>,
+    thumb_service: Arc<ThumbnailService>,
     event_bus: Arc<EventBus>,
     db: Arc<Database>,
 }
@@ -212,6 +214,18 @@ async fn check_conflicts(
 }
 
 #[tauri::command]
+async fn get_thumbnail(
+    path: String,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    let path = PathBuf::from(&path);
+    if !ThumbnailService::is_supported(&path) {
+        return Err("Unsupported file type".to_string());
+    }
+    state.thumb_service.get_thumbnail(path).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn save_workspace(
     name: String,
     state_json: String,
@@ -317,9 +331,14 @@ fn main() {
 
     let event_bus = Arc::new(EventBus::new(1024));
     let fs_engine = Arc::new(FileOpsEngine::new(event_bus.clone()));
+    let thumb_service = Arc::new(
+        ThumbnailService::new(data_dir.join("thumbs"), 128)
+            .expect("Failed to create thumbnail service")
+    );
 
     let app_state = AppState {
         fs_engine,
+        thumb_service,
         event_bus: event_bus.clone(),
         db,
     };
@@ -377,6 +396,7 @@ fn main() {
             check_conflicts,
             save_workspace,
             load_workspace,
+            get_thumbnail,
         ])
         .run(tauri::generate_context!())
         .expect("error running Noema");
