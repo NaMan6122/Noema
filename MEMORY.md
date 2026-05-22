@@ -26,24 +26,28 @@
 
 **Completed:** 2026-05-22 (sidebar, breadcrumb, virtualized list, layout restructure)
 
-#### Week 3: File Operations & Undo — PARTIAL
+#### Week 3: File Operations & Undo — DONE
 - [x] 3.1 Copy/Move engine (IPC commands implemented)
+- [x] 3.2 Delete (Trash) — uses `trash` crate, working via context menu
 - [x] 3.3 Rename
 - [x] 3.4 Create new folder/file
+- [x] 3.5 Undo/Redo stack — full undo + redo for Copy/Move/Delete/Rename
 - [x] 3.6 Progress UI (ProgressToast component)
 - [x] 3.7 Conflict resolution (ConflictDialog component)
-- [x] 3.2 Delete (Trash) — uses `trash` crate, working via context menu
-- [ ] 3.5 Undo/Redo stack
 - [x] 3.8 Multi-select — basic drag-drop done
 
-#### Week 4: Tabs, Keyboard Navigation & Drag-Drop — PARTIAL
-- [ ] 4.1 Tab system
-- [ ] 4.2 Keyboard navigation
-- [ ] 4.3 Command palette
+**Completed:** 2026-05-22
+
+#### Week 4: Tabs, Keyboard Navigation & Command Palette — DONE
+- [x] 4.1 Tab system — TabBar.svelte with per-tab state, drag-to-reorder
+- [x] 4.2 Keyboard navigation — Arrow keys, Enter, Space, Home/End, type-ahead search
+- [x] 4.3 Command palette — Cmd+K overlay with filterable commands
 - [x] 4.4 Drag and drop (internal) — basic implementation
 - [ ] 4.5 Drag and drop (OS)
 - [x] 4.6 Context menu — basic implementation
-- [ ] 4.7 Workspace save/restore
+- [x] 4.7 Workspace save/restore — auto-save on close, restore on launch
+
+**Completed:** 2026-05-22
 
 #### Weeks 5–6: Not started
 
@@ -55,6 +59,11 @@
 | 2026-05-21 | 55192bd | Implement WatcherService with notify-debouncer-full |
 | 2026-05-21 | 55030cf | Add file operation IPC commands and context menu UI |
 | 2026-05-21 | 9f15925 | Add progress toasts, conflict resolution, and drag-drop |
+| 2026-05-22 | 3c4c6c1 | Implement redo for file operations and add redo IPC command |
+| 2026-05-22 | 326df9c | Add tab system with per-tab state and drag-to-reorder |
+| 2026-05-22 | 87e8feb | Add keyboard navigation to file list |
+| 2026-05-22 | f56233c | Add command palette with Cmd+K shortcut |
+| 2026-05-22 | ee17728 | Add workspace save/restore for session persistence |
 
 ### Architecture Decisions
 - All-Rust backend, Tauri shell, Svelte frontend
