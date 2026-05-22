@@ -6,6 +6,7 @@
   import Sidebar from './lib/Sidebar.svelte';
   import FileList from './lib/FileList.svelte';
   import TabBar from './lib/TabBar.svelte';
+  import CommandPalette from './lib/CommandPalette.svelte';
 
   interface FileEntry {
     path: string;
@@ -46,6 +47,34 @@
 
   // Context menu
   let contextMenu = { visible: false, x: 0, y: 0 };
+
+  // Command palette
+  let paletteVisible = false;
+
+  $: paletteCommands = [
+    { id: 'home', label: 'Go to Home', action: () => { dirs('home_dir'); } },
+    { id: 'desktop', label: 'Go to Desktop', action: () => { dirs('desktop_dir'); } },
+    { id: 'documents', label: 'Go to Documents', action: () => { dirs('document_dir'); } },
+    { id: 'downloads', label: 'Go to Downloads', action: () => { dirs('download_dir'); } },
+    { id: 'new-tab', label: 'New Tab', shortcut: 'Cmd+T', action: newTab },
+    { id: 'close-tab', label: 'Close Tab', shortcut: 'Cmd+W', action: () => closeTab(activeTabId) },
+    { id: 'toggle-hidden', label: 'Toggle Hidden Files', action: () => { showHidden = !showHidden; loadDirectory(currentPath); } },
+    { id: 'new-folder', label: 'New Folder', action: handleNewFolder },
+    { id: 'new-file', label: 'New File', action: handleNewFile },
+    { id: 'undo', label: 'Undo', shortcut: 'Cmd+Z', action: handleUndo },
+    { id: 'redo', label: 'Redo', shortcut: 'Cmd+Shift+Z', action: handleRedo },
+  ];
+
+  async function dirs(name: string) {
+    try {
+      const favorites = await invoke<Array<{ name: string; path: string; kind: string }>>('get_favorites');
+      const map: Record<string, string> = {
+        home_dir: 'Home', desktop_dir: 'Desktop', document_dir: 'Documents', download_dir: 'Downloads',
+      };
+      const fav = favorites.find(f => f.name === map[name]);
+      if (fav) navigateTo(fav.path);
+    } catch (_) {}
+  }
 
   // Breadcrumb
   let editingPath = false;
@@ -421,7 +450,10 @@
   function handleKeydown(e: KeyboardEvent) {
     if (renamingPath || editingPath) return;
 
-    if ((e.metaKey || e.ctrlKey) && e.key === 't') {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+      e.preventDefault();
+      paletteVisible = !paletteVisible;
+    } else if ((e.metaKey || e.ctrlKey) && e.key === 't') {
       e.preventDefault();
       newTab();
     } else if ((e.metaKey || e.ctrlKey) && e.key === 'w') {
@@ -550,6 +582,12 @@
   </footer>
 
   <ProgressToast />
+
+  <CommandPalette
+    visible={paletteVisible}
+    commands={paletteCommands}
+    onClose={() => paletteVisible = false}
+  />
 </div>
 
 <style>
