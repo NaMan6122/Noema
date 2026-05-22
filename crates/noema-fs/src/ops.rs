@@ -359,12 +359,73 @@ impl FileOpsEngine {
     }
 
     pub async fn redo(&self) -> Result<()> {
-        let _op = {
+        let op = {
             let mut stack = self.redo_stack.lock().await;
             stack.pop_back().ok_or(NoemaError::Cancelled)?
         };
-        // Re-execute the operation
-        todo!("Implement redo execution")
+
+        match &op {
+            UndoableOp::Copy { sources, created } => {
+                for (source, dest) in sources.iter().zip(created.iter()) {
+                    if source.is_dir() {
+                        copy_dir_recursive(source, dest)?;
+                    } else {
+                        std::fs::copy(source, dest)?;
+                    }
+                    self.event_bus.emit(AppEvent::FileChanged {
+                        path: dest.clone(),
+                        change: ChangeType::Created,
+                    });
+                }
+            }
+            UndoableOp::Move { moves } => {
+                for (original, new_loc) in moves {
+                    if let Err(_) = std::fs::rename(original, new_loc) {
+                        if original.is_dir() {
+                            copy_dir_recursive(original, new_loc)?;
+                            std::fs::remove_dir_all(original)?;
+                        } else {
+                            std::fs::copy(original, new_loc)?;
+                            std::fs::remove_file(original)?;
+                        }
+                    }
+                    self.event_bus.emit(AppEvent::FileChanged {
+                        path: new_loc.clone(),
+                        change: ChangeType::Renamed { from: original.clone() },
+                    });
+                }
+            }
+            UndoableOp::Delete { trashed } => {
+                for path in trashed {
+                    if path.exists() {
+                        trash::delete(path).map_err(|e| NoemaError::Io(
+                            std::io::Error::new(std::io::ErrorKind::Other, e)
+                        ))?;
+                        self.event_bus.emit(AppEvent::FileChanged {
+                            path: path.clone(),
+                            change: ChangeType::Deleted,
+                        });
+                    }
+                }
+            }
+            UndoableOp::Rename { path, old_name, new_name } => {
+                let parent = path.parent().unwrap();
+                let old_path = parent.join(old_name);
+                let new_path = parent.join(new_name);
+                std::fs::rename(&old_path, &new_path)?;
+                self.event_bus.emit(AppEvent::FileChanged {
+                    path: new_path,
+                    change: ChangeType::Renamed { from: old_path },
+                });
+            }
+        }
+
+        let mut undo = self.undo_stack.lock().await;
+        if undo.len() >= 50 {
+            undo.pop_front();
+        }
+        undo.push_back(op);
+        Ok(())
     }
 
     pub fn can_undo(&self) -> bool {

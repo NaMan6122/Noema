@@ -176,6 +176,11 @@ async fn undo(state: State<'_, AppState>) -> Result<(), String> {
     state.fs_engine.undo().await.map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+async fn redo(state: State<'_, AppState>) -> Result<(), String> {
+    state.fs_engine.redo().await.map_err(|e| e.to_string())
+}
+
 #[derive(Serialize)]
 struct ConflictInfo {
     source: String,
@@ -338,6 +343,7 @@ fn main() {
             create_directory,
             create_file,
             undo,
+            redo,
             check_conflicts,
         ])
         .run(tauri::generate_context!())
