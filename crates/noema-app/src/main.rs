@@ -176,6 +176,11 @@ async fn undo(state: State<'_, AppState>) -> Result<(), String> {
     state.fs_engine.undo().await.map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+async fn redo(state: State<'_, AppState>) -> Result<(), String> {
+    state.fs_engine.redo().await.map_err(|e| e.to_string())
+}
+
 #[derive(Serialize)]
 struct ConflictInfo {
     source: String,
@@ -204,6 +209,36 @@ async fn check_conflicts(
         }
     }
     Ok(conflicts)
+}
+
+#[tauri::command]
+async fn save_workspace(
+    name: String,
+    state_json: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let conn = state.db.connection().map_err(|e| e.to_string())?;
+    let now = chrono::Utc::now().to_rfc3339();
+    conn.execute(
+        "INSERT INTO workspaces (name, state_json, created_at, is_active) VALUES (?1, ?2, ?3, 1)
+         ON CONFLICT(name) DO UPDATE SET state_json = ?2, created_at = ?3",
+        rusqlite::params![name, state_json, now],
+    ).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn load_workspace(
+    name: String,
+    state: State<'_, AppState>,
+) -> Result<Option<String>, String> {
+    let conn = state.db.connection().map_err(|e| e.to_string())?;
+    let result: Option<String> = conn.query_row(
+        "SELECT state_json FROM workspaces WHERE name = ?1",
+        rusqlite::params![name],
+        |row| row.get(0),
+    ).ok();
+    Ok(result)
 }
 
 #[tauri::command]
@@ -338,7 +373,10 @@ fn main() {
             create_directory,
             create_file,
             undo,
+            redo,
             check_conflicts,
+            save_workspace,
+            load_workspace,
         ])
         .run(tauri::generate_context!())
         .expect("error running Noema");
