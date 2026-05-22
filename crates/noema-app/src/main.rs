@@ -18,6 +18,13 @@ struct AppState {
 }
 
 #[derive(Serialize)]
+struct FavoriteEntry {
+    name: String,
+    path: String,
+    kind: String, // "favorite" or "volume"
+}
+
+#[derive(Serialize)]
 struct FileEntryDto {
     path: String,
     filename: String,
@@ -199,6 +206,70 @@ async fn check_conflicts(
     Ok(conflicts)
 }
 
+#[tauri::command]
+async fn get_favorites() -> Result<Vec<FavoriteEntry>, String> {
+    let mut favorites = Vec::new();
+
+    let dirs_map: Vec<(&str, Option<PathBuf>)> = vec![
+        ("Home", dirs::home_dir()),
+        ("Desktop", dirs::desktop_dir()),
+        ("Documents", dirs::document_dir()),
+        ("Downloads", dirs::download_dir()),
+        ("Pictures", dirs::picture_dir()),
+        ("Music", dirs::audio_dir()),
+        ("Videos", dirs::video_dir()),
+    ];
+
+    for (name, path) in dirs_map {
+        if let Some(p) = path {
+            if p.exists() {
+                favorites.push(FavoriteEntry {
+                    name: name.to_string(),
+                    path: p.to_string_lossy().to_string(),
+                    kind: "favorite".to_string(),
+                });
+            }
+        }
+    }
+
+    // Volumes (macOS: /Volumes/*, Linux: /mnt/* and /media/*, Windows: drive letters)
+    #[cfg(target_os = "macos")]
+    {
+        if let Ok(entries) = std::fs::read_dir("/Volumes") {
+            for entry in entries.flatten() {
+                let name = entry.file_name().to_string_lossy().to_string();
+                if name == "Macintosh HD" {
+                    continue;
+                }
+                favorites.push(FavoriteEntry {
+                    name,
+                    path: entry.path().to_string_lossy().to_string(),
+                    kind: "volume".to_string(),
+                });
+            }
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        for mount_dir in &["/mnt", "/media"] {
+            if let Ok(entries) = std::fs::read_dir(mount_dir) {
+                for entry in entries.flatten() {
+                    if entry.path().is_dir() {
+                        favorites.push(FavoriteEntry {
+                            name: entry.file_name().to_string_lossy().to_string(),
+                            path: entry.path().to_string_lossy().to_string(),
+                            kind: "volume".to_string(),
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(favorites)
+}
+
 fn main() {
     tracing_subscriber::fmt::init();
 
@@ -223,7 +294,7 @@ fn main() {
         .setup(move |app| {
             let handle = app.handle().clone();
             let mut rx = event_bus.subscribe();
-            tokio::spawn(async move {
+            tauri::async_runtime::spawn(async move {
                 while let Ok(event) = rx.recv().await {
                     match event {
                         AppEvent::OperationStarted { id, op_type, total_items } => {
@@ -259,6 +330,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             list_directory,
             get_home_dir,
+            get_favorites,
             copy_files,
             move_files,
             delete_files,
