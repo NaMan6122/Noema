@@ -5,6 +5,7 @@
   import ProgressToast from './lib/ProgressToast.svelte';
   import Sidebar from './lib/Sidebar.svelte';
   import FileList from './lib/FileList.svelte';
+  import TabBar from './lib/TabBar.svelte';
 
   interface FileEntry {
     path: string;
@@ -18,22 +19,23 @@
     is_symlink: boolean;
   }
 
-  let entries: FileEntry[] = [];
-  let currentPath = '';
-  let pathHistory: string[] = [];
-  let historyIndex = -1;
-  let sortField = 'name';
-  let sortDirection = 'asc';
+  interface TabState {
+    id: string;
+    path: string;
+    title: string;
+    entries: FileEntry[];
+    selectedPaths: Set<string>;
+    pathHistory: string[];
+    historyIndex: number;
+    sortField: string;
+    sortDirection: string;
+  }
+
+  let tabs: TabState[] = [];
+  let activeTabId = '';
   let showHidden = false;
   let loading = false;
   let error = '';
-
-  // Selection
-  let selectedPaths: Set<string> = new Set();
-  let lastSelectedIndex = -1;
-
-  // Context menu
-  let contextMenu = { visible: false, x: 0, y: 0 };
 
   // Inline rename
   let renamingPath = '';
@@ -42,40 +44,92 @@
   // Drag-drop
   let dragOverPath = '';
 
+  // Context menu
+  let contextMenu = { visible: false, x: 0, y: 0 };
+
   // Breadcrumb
   let editingPath = false;
   let pathInputValue = '';
 
+  $: activeTab = tabs.find(t => t.id === activeTabId);
+  $: currentPath = activeTab?.path ?? '';
+  $: entries = activeTab?.entries ?? [];
+  $: selectedPaths = activeTab?.selectedPaths ?? new Set<string>();
+  $: sortField = activeTab?.sortField ?? 'name';
+  $: sortDirection = activeTab?.sortDirection ?? 'asc';
+  $: tabBarData = tabs.map(t => ({ id: t.id, path: t.path, title: t.title }));
+
+  function genId(): string {
+    return Math.random().toString(36).slice(2, 10);
+  }
+
+  function titleFromPath(path: string): string {
+    const parts = path.split('/').filter(Boolean);
+    return parts.length > 0 ? parts[parts.length - 1] : '/';
+  }
+
+  function updateActiveTab(update: Partial<TabState>) {
+    tabs = tabs.map(t => t.id === activeTabId ? { ...t, ...update } as TabState : t);
+  }
+
   onMount(async () => {
     const home = await invoke<string>('get_home_dir');
-    await navigateTo(home);
+    const id = genId();
+    tabs = [{
+      id,
+      path: home,
+      title: titleFromPath(home),
+      entries: [],
+      selectedPaths: new Set(),
+      pathHistory: [],
+      historyIndex: -1,
+      sortField: 'name',
+      sortDirection: 'asc',
+    }];
+    activeTabId = id;
+    await loadDirectory(home);
 
     listen('fs:changed', () => {
-      navigateTo(currentPath);
+      loadDirectory(currentPath);
     });
   });
 
-  async function navigateTo(path: string) {
+  async function loadDirectory(path: string) {
+    if (!activeTab) return;
     loading = true;
     error = '';
     editingPath = false;
     try {
-      entries = await invoke<FileEntry[]>('list_directory', {
+      const newEntries = await invoke<FileEntry[]>('list_directory', {
         path,
-        sortField,
-        sortDirection,
+        sortField: activeTab.sortField,
+        sortDirection: activeTab.sortDirection,
         showHidden,
       });
-      if (currentPath !== path) {
-        pathHistory = [...pathHistory.slice(0, historyIndex + 1), path];
-        historyIndex = pathHistory.length - 1;
+
+      let newHistory = activeTab.pathHistory;
+      let newHistoryIndex = activeTab.historyIndex;
+      if (activeTab.path !== path) {
+        newHistory = [...activeTab.pathHistory.slice(0, activeTab.historyIndex + 1), path];
+        newHistoryIndex = newHistory.length - 1;
       }
-      currentPath = path;
-      selectedPaths = new Set();
+
+      updateActiveTab({
+        path,
+        title: titleFromPath(path),
+        entries: newEntries,
+        selectedPaths: new Set(),
+        pathHistory: newHistory,
+        historyIndex: newHistoryIndex,
+      });
     } catch (e) {
       error = String(e);
     }
     loading = false;
+  }
+
+  function navigateTo(path: string) {
+    loadDirectory(path);
   }
 
   function goUp() {
@@ -84,17 +138,41 @@
   }
 
   function goBack() {
-    if (historyIndex > 0) {
-      historyIndex--;
-      navigateTo(pathHistory[historyIndex]);
-    }
+    if (!activeTab || activeTab.historyIndex <= 0) return;
+    const newIdx = activeTab.historyIndex - 1;
+    updateActiveTab({ historyIndex: newIdx });
+    loadDirectoryNoHistory(activeTab.pathHistory[newIdx]);
   }
 
   function goForward() {
-    if (historyIndex < pathHistory.length - 1) {
-      historyIndex++;
-      navigateTo(pathHistory[historyIndex]);
+    if (!activeTab || activeTab.historyIndex >= activeTab.pathHistory.length - 1) return;
+    const newIdx = activeTab.historyIndex + 1;
+    updateActiveTab({ historyIndex: newIdx });
+    loadDirectoryNoHistory(activeTab.pathHistory[newIdx]);
+  }
+
+  async function loadDirectoryNoHistory(path: string) {
+    if (!activeTab) return;
+    loading = true;
+    error = '';
+    editingPath = false;
+    try {
+      const newEntries = await invoke<FileEntry[]>('list_directory', {
+        path,
+        sortField: activeTab.sortField,
+        sortDirection: activeTab.sortDirection,
+        showHidden,
+      });
+      updateActiveTab({
+        path,
+        title: titleFromPath(path),
+        entries: newEntries,
+        selectedPaths: new Set(),
+      });
+    } catch (e) {
+      error = String(e);
     }
+    loading = false;
   }
 
   function openEntry(entry: FileEntry) {
@@ -104,30 +182,66 @@
   }
 
   function selectEntry(entry: FileEntry, index: number, event: MouseEvent) {
+    if (!activeTab) return;
+    const prev = activeTab.selectedPaths;
+    let next: Set<string>;
+
     if (event.metaKey || event.ctrlKey) {
-      const next = new Set(selectedPaths);
-      if (next.has(entry.path)) {
-        next.delete(entry.path);
+      next = new Set(prev);
+      if (next.has(entry.path)) next.delete(entry.path);
+      else next.add(entry.path);
+    } else if (event.shiftKey) {
+      next = new Set(prev);
+      // Simple range select from last click
+      const lastIdx = entries.findIndex(e => prev.has(e.path));
+      if (lastIdx >= 0) {
+        const start = Math.min(lastIdx, index);
+        const end = Math.max(lastIdx, index);
+        for (let i = start; i <= end; i++) next.add(entries[i].path);
       } else {
         next.add(entry.path);
       }
-      selectedPaths = next;
-    } else if (event.shiftKey && lastSelectedIndex >= 0) {
-      const start = Math.min(lastSelectedIndex, index);
-      const end = Math.max(lastSelectedIndex, index);
-      const next = new Set(selectedPaths);
-      for (let i = start; i <= end; i++) {
-        next.add(entries[i].path);
-      }
-      selectedPaths = next;
     } else {
-      selectedPaths = new Set([entry.path]);
+      next = new Set([entry.path]);
     }
-    lastSelectedIndex = index;
+    updateActiveTab({ selectedPaths: next });
   }
 
   function selectAll() {
-    selectedPaths = new Set(entries.map(e => e.path));
+    updateActiveTab({ selectedPaths: new Set(entries.map(e => e.path)) });
+  }
+
+  // Tabs
+  function newTab() {
+    const id = genId();
+    const path = currentPath || '/';
+    tabs = [...tabs, {
+      id,
+      path,
+      title: titleFromPath(path),
+      entries: [],
+      selectedPaths: new Set(),
+      pathHistory: [],
+      historyIndex: -1,
+      sortField: 'name',
+      sortDirection: 'asc',
+    }];
+    activeTabId = id;
+    loadDirectory(path);
+  }
+
+  function closeTab(id: string) {
+    if (tabs.length <= 1) return;
+    const idx = tabs.findIndex(t => t.id === id);
+    tabs = tabs.filter(t => t.id !== id);
+    if (activeTabId === id) {
+      activeTabId = tabs[Math.min(idx, tabs.length - 1)].id;
+    }
+  }
+
+  function selectTab(id: string) {
+    activeTabId = id;
+    error = '';
   }
 
   // Breadcrumb
@@ -163,7 +277,7 @@
   function showContextMenu(event: MouseEvent, entry?: FileEntry) {
     event.preventDefault();
     if (entry && !selectedPaths.has(entry.path)) {
-      selectedPaths = new Set([entry.path]);
+      updateActiveTab({ selectedPaths: new Set([entry.path]) });
     }
     contextMenu = { visible: true, x: event.clientX, y: event.clientY };
   }
@@ -178,7 +292,7 @@
     if (selectedPaths.size === 0) return;
     try {
       await invoke('delete_files', { paths: [...selectedPaths], useTrash: true });
-      await navigateTo(currentPath);
+      await loadDirectory(currentPath);
     } catch (e) {
       error = String(e);
     }
@@ -203,7 +317,7 @@
     try {
       await invoke('rename_file', { path: renamingPath, newName: renameValue });
       renamingPath = '';
-      await navigateTo(currentPath);
+      await loadDirectory(currentPath);
     } catch (e) {
       error = String(e);
       renamingPath = '';
@@ -216,11 +330,10 @@
 
   async function handleNewFolder() {
     hideContextMenu();
-    const name = 'New Folder';
-    const path = `${currentPath}/${name}`;
+    const path = `${currentPath}/New Folder`;
     try {
       await invoke('create_directory', { path });
-      await navigateTo(currentPath);
+      await loadDirectory(currentPath);
     } catch (e) {
       error = String(e);
     }
@@ -228,11 +341,10 @@
 
   async function handleNewFile() {
     hideContextMenu();
-    const name = 'untitled';
-    const path = `${currentPath}/${name}`;
+    const path = `${currentPath}/untitled`;
     try {
       await invoke('create_file', { path });
-      await navigateTo(currentPath);
+      await loadDirectory(currentPath);
     } catch (e) {
       error = String(e);
     }
@@ -241,7 +353,16 @@
   async function handleUndo() {
     try {
       await invoke('undo');
-      await navigateTo(currentPath);
+      await loadDirectory(currentPath);
+    } catch (e) {
+      error = String(e);
+    }
+  }
+
+  async function handleRedo() {
+    try {
+      await invoke('redo');
+      await loadDirectory(currentPath);
     } catch (e) {
       error = String(e);
     }
@@ -288,22 +409,36 @@
   }
 
   function toggleSort(field: string) {
-    if (sortField === field) {
-      sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
-    } else {
-      sortField = field;
-      sortDirection = 'asc';
+    if (!activeTab) return;
+    let newDirection = 'asc';
+    if (activeTab.sortField === field) {
+      newDirection = activeTab.sortDirection === 'asc' ? 'desc' : 'asc';
     }
-    navigateTo(currentPath);
+    updateActiveTab({ sortField: field, sortDirection: newDirection });
+    loadDirectory(currentPath);
   }
 
   function handleKeydown(e: KeyboardEvent) {
     if (renamingPath || editingPath) return;
-    if (e.key === 'Backspace' && !e.metaKey) {
+
+    if ((e.metaKey || e.ctrlKey) && e.key === 't') {
+      e.preventDefault();
+      newTab();
+    } else if ((e.metaKey || e.ctrlKey) && e.key === 'w') {
+      e.preventDefault();
+      closeTab(activeTabId);
+    } else if ((e.metaKey || e.ctrlKey) && e.key >= '1' && e.key <= '9') {
+      e.preventDefault();
+      const idx = parseInt(e.key) - 1;
+      if (idx < tabs.length) activeTabId = tabs[idx].id;
+    } else if (e.key === 'Backspace' && !e.metaKey) {
       goUp();
     } else if (e.key === 'a' && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
       selectAll();
+    } else if (e.key === 'z' && (e.metaKey || e.ctrlKey) && e.shiftKey) {
+      e.preventDefault();
+      handleRedo();
     } else if (e.key === 'z' && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
       handleUndo();
@@ -316,10 +451,18 @@
 <svelte:window on:keydown={handleKeydown} on:click={hideContextMenu} />
 
 <div class="app">
+  <TabBar
+    tabs={tabBarData}
+    {activeTabId}
+    onSelect={selectTab}
+    onClose={closeTab}
+    onNew={newTab}
+  />
+
   <header class="toolbar">
     <div class="nav-buttons">
-      <button on:click={goBack} disabled={historyIndex <= 0} title="Back">←</button>
-      <button on:click={goForward} disabled={historyIndex >= pathHistory.length - 1} title="Forward">→</button>
+      <button on:click={goBack} disabled={!activeTab || activeTab.historyIndex <= 0} title="Back">←</button>
+      <button on:click={goForward} disabled={!activeTab || activeTab.historyIndex >= activeTab.pathHistory.length - 1} title="Forward">→</button>
       <button on:click={goUp} title="Go up">↑</button>
     </div>
     <div class="breadcrumb">
@@ -349,7 +492,7 @@
     </div>
     <div class="actions">
       <label>
-        <input type="checkbox" bind:checked={showHidden} on:change={() => navigateTo(currentPath)} />
+        <input type="checkbox" bind:checked={showHidden} on:change={() => loadDirectory(currentPath)} />
         Hidden
       </label>
     </div>
