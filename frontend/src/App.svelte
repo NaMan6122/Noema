@@ -268,6 +268,8 @@
   function openEntry(entry: FileEntry) {
     if (entry.is_dir) {
       navigateTo(entry.path);
+    } else {
+      invoke('log_file_open', { path: entry.path }).catch(() => {});
     }
   }
 

@@ -158,6 +158,13 @@ impl Database {
                 created_at  TEXT NOT NULL,
                 is_active   INTEGER DEFAULT 0
             );
+
+            CREATE TABLE IF NOT EXISTS recent_paths (
+                id          INTEGER PRIMARY KEY,
+                path        TEXT NOT NULL UNIQUE,
+                accessed_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_recent_accessed ON recent_paths(accessed_at);
         ")?;
         Ok(())
     }

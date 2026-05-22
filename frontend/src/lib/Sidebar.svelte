@@ -13,6 +13,7 @@
 
   let favorites: FavoriteEntry[] = [];
   let volumes: FavoriteEntry[] = [];
+  let recents: FavoriteEntry[] = [];
 
   const favoriteIcons: Record<string, string> = {
     Home: '🏠',
@@ -32,6 +33,9 @@
     } catch (e) {
       console.error('Failed to load favorites:', e);
     }
+    try {
+      recents = await invoke<FavoriteEntry[]>('get_recent_files');
+    } catch (_) {}
   });
 
   function isActive(path: string): boolean {
@@ -67,6 +71,23 @@
         >
           <span class="sidebar-icon">💾</span>
           <span class="sidebar-label">{vol.name}</span>
+        </button>
+      {/each}
+    </section>
+  {/if}
+
+  {#if recents.length > 0}
+    <section>
+      <h3>Recents</h3>
+      {#each recents as rec}
+        <button
+          class="sidebar-item"
+          class:active={isActive(rec.path)}
+          on:click={() => onNavigate(rec.path)}
+          title={rec.path}
+        >
+          <span class="sidebar-icon">🕐</span>
+          <span class="sidebar-label">{rec.name}</span>
         </button>
       {/each}
     </section>

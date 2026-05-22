@@ -229,6 +229,40 @@ struct FileInfoDto {
 }
 
 #[tauri::command]
+async fn log_file_open(
+    path: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let conn = state.db.connection().map_err(|e| e.to_string())?;
+    let now = chrono::Utc::now().to_rfc3339();
+    conn.execute(
+        "INSERT INTO recent_paths (path, accessed_at) VALUES (?1, ?2)
+         ON CONFLICT(path) DO UPDATE SET accessed_at = ?2",
+        rusqlite::params![path, now],
+    ).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn get_recent_files(
+    state: State<'_, AppState>,
+) -> Result<Vec<FavoriteEntry>, String> {
+    let conn = state.db.connection().map_err(|e| e.to_string())?;
+    let mut stmt = conn.prepare(
+        "SELECT path FROM recent_paths ORDER BY accessed_at DESC LIMIT 20"
+    ).map_err(|e| e.to_string())?;
+    let paths: Vec<String> = stmt.query_map([], |row| row.get(0))
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+    Ok(paths.into_iter().filter_map(|p| {
+        let path = std::path::Path::new(&p);
+        let name = path.file_name()?.to_string_lossy().to_string();
+        Some(FavoriteEntry { name, path: p, kind: "recent".to_string() })
+    }).collect())
+}
+
+#[tauri::command]
 async fn search_files(
     root: String,
     query: String,
@@ -527,6 +561,8 @@ fn main() {
             highlight_code,
             get_file_info,
             search_files,
+            log_file_open,
+            get_recent_files,
         ])
         .run(tauri::generate_context!())
         .expect("error running Noema");
