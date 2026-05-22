@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { invoke } from '@tauri-apps/api/core';
   import { onMount, tick } from 'svelte';
 
   interface FileEntry {
@@ -43,6 +44,26 @@
   let focusIndex = -1;
   let typeAheadBuffer = '';
   let typeAheadTimer: ReturnType<typeof setTimeout> | null = null;
+
+  let thumbnails: Record<string, string> = {};
+  const IMAGE_EXTS = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+
+  function isImage(entry: FileEntry): boolean {
+    return !entry.is_dir && !!entry.extension && IMAGE_EXTS.includes(entry.extension.toLowerCase());
+  }
+
+  async function loadThumbnail(entry: FileEntry) {
+    if (thumbnails[entry.path] !== undefined) return;
+    thumbnails[entry.path] = '';
+    try {
+      const dataUri = await invoke<string>('get_thumbnail', { path: entry.path });
+      thumbnails = { ...thumbnails, [entry.path]: dataUri };
+    } catch (_) {}
+  }
+
+  $: if (viewMode === 'grid') {
+    entries.filter(isImage).forEach(loadThumbnail);
+  }
 
   $: totalHeight = entries.length * ROW_HEIGHT;
   $: startIndex = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - BUFFER);
@@ -271,7 +292,13 @@
           on:dblclick={() => onOpen(entry)}
           on:contextmenu|stopPropagation={(e) => onContextMenu(e, entry)}
         >
-          <div class="grid-icon">{getIcon(entry)}</div>
+          <div class="grid-icon">
+            {#if isImage(entry) && thumbnails[entry.path]}
+              <img class="grid-thumb" src={thumbnails[entry.path]} alt={entry.filename} />
+            {:else}
+              {getIcon(entry)}
+            {/if}
+          </div>
           <div class="grid-name">
             {#if renamingPath === entry.path}
               <input
@@ -431,6 +458,18 @@
   .grid-icon {
     font-size: 40px;
     margin-bottom: 6px;
+    width: 64px;
+    height: 64px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .grid-thumb {
+    max-width: 64px;
+    max-height: 64px;
+    border-radius: 4px;
+    object-fit: cover;
   }
 
   .grid-name {
