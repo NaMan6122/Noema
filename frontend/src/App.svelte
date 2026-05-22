@@ -7,6 +7,7 @@
   import FileList from './lib/FileList.svelte';
   import TabBar from './lib/TabBar.svelte';
   import CommandPalette from './lib/CommandPalette.svelte';
+  import PreviewPane from './lib/PreviewPane.svelte';
 
   interface FileEntry {
     path: string;
@@ -49,6 +50,9 @@
   // Context menu
   let contextMenu = { visible: false, x: 0, y: 0 };
 
+  // Preview pane
+  let previewVisible = false;
+
   // Command palette
   let paletteVisible = false;
 
@@ -88,6 +92,7 @@
   $: sortField = activeTab?.sortField ?? 'name';
   $: sortDirection = activeTab?.sortDirection ?? 'asc';
   $: viewMode = activeTab?.viewMode ?? 'list';
+  $: selectedEntry = selectedPaths.size === 1 ? entries.find(e => selectedPaths.has(e.path)) ?? null : null;
   $: tabBarData = tabs.map(t => ({ id: t.id, path: t.path, title: t.title }));
 
   function genId(): string {
@@ -523,6 +528,9 @@
       handleUndo();
     } else if (e.key === 'Delete' || (e.key === 'Backspace' && e.metaKey)) {
       handleDelete();
+    } else if (e.key === ' ' && !e.metaKey && !e.ctrlKey) {
+      e.preventDefault();
+      previewVisible = !previewVisible;
     }
   }
 </script>
@@ -613,6 +621,8 @@
         />
       {/if}
     </div>
+
+    <PreviewPane entry={selectedEntry} visible={previewVisible} />
   </div>
 
   {#if contextMenu.visible}

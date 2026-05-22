@@ -129,14 +129,6 @@
           onOpen(entries[focusIndex]);
         }
         break;
-      case ' ':
-        e.preventDefault();
-        if (focusIndex >= 0 && focusIndex < entries.length) {
-          const entry = entries[focusIndex];
-          const fakeEvent = { metaKey: true, ctrlKey: false, shiftKey: false } as MouseEvent;
-          onSelect(entry, focusIndex, fakeEvent);
-        }
-        break;
       case 'Home':
         e.preventDefault();
         focusIndex = 0;

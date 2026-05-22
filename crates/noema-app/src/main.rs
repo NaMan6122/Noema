@@ -214,6 +214,25 @@ async fn check_conflicts(
 }
 
 #[tauri::command]
+async fn read_file_preview(
+    path: String,
+    max_bytes: Option<usize>,
+) -> Result<String, String> {
+    let max = max_bytes.unwrap_or(10240);
+    let path = PathBuf::from(&path);
+    tokio::task::spawn_blocking(move || {
+        let bytes = std::fs::read(&path).map_err(|e| e.to_string())?;
+        let truncated = &bytes[..bytes.len().min(max)];
+        match String::from_utf8(truncated.to_vec()) {
+            Ok(s) => Ok(s),
+            Err(_) => Ok(String::from_utf8_lossy(truncated).to_string()),
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
 async fn get_thumbnail(
     path: String,
     state: State<'_, AppState>,
@@ -397,6 +416,7 @@ fn main() {
             save_workspace,
             load_workspace,
             get_thumbnail,
+            read_file_preview,
         ])
         .run(tauri::generate_context!())
         .expect("error running Noema");
