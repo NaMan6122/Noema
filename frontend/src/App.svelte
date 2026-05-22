@@ -102,26 +102,61 @@
   }
 
   onMount(async () => {
-    const home = await invoke<string>('get_home_dir');
-    const id = genId();
-    tabs = [{
-      id,
-      path: home,
-      title: titleFromPath(home),
-      entries: [],
-      selectedPaths: new Set(),
-      pathHistory: [],
-      historyIndex: -1,
-      sortField: 'name',
-      sortDirection: 'asc',
-    }];
-    activeTabId = id;
-    await loadDirectory(home);
+    // Try to restore last workspace
+    let restoredTabs: Array<{ path: string; sortField: string; sortDirection: string }> | null = null;
+    try {
+      const json = await invoke<string | null>('load_workspace', { name: 'last_session' });
+      if (json) restoredTabs = JSON.parse(json);
+    } catch (_) {}
+
+    if (restoredTabs && restoredTabs.length > 0) {
+      tabs = restoredTabs.map(t => ({
+        id: genId(),
+        path: t.path,
+        title: titleFromPath(t.path),
+        entries: [],
+        selectedPaths: new Set<string>(),
+        pathHistory: [],
+        historyIndex: -1,
+        sortField: t.sortField || 'name',
+        sortDirection: t.sortDirection || 'asc',
+      }));
+      activeTabId = tabs[0].id;
+      await loadDirectory(tabs[0].path);
+    } else {
+      const home = await invoke<string>('get_home_dir');
+      const id = genId();
+      tabs = [{
+        id,
+        path: home,
+        title: titleFromPath(home),
+        entries: [],
+        selectedPaths: new Set(),
+        pathHistory: [],
+        historyIndex: -1,
+        sortField: 'name',
+        sortDirection: 'asc',
+      }];
+      activeTabId = id;
+      await loadDirectory(home);
+    }
 
     listen('fs:changed', () => {
       loadDirectory(currentPath);
     });
+
+    window.addEventListener('beforeunload', saveWorkspace);
+    return () => window.removeEventListener('beforeunload', saveWorkspace);
   });
+
+  function saveWorkspace() {
+    const state = tabs.map(t => ({
+      path: t.path,
+      sortField: t.sortField,
+      sortDirection: t.sortDirection,
+    }));
+    invoke('save_workspace', { name: 'last_session', stateJson: JSON.stringify(state) }).catch(() => {});
+  }
 
   async function loadDirectory(path: string) {
     if (!activeTab) return;

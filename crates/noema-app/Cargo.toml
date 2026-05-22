@@ -21,6 +21,8 @@ tracing-subscriber = "0.3"
 tauri = { version = "2", features = [] }
 tauri-build = { version = "2", features = [] }
 dirs = "6"
+chrono = { workspace = true }
+rusqlite = { version = "0.32", features = ["bundled"] }
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
