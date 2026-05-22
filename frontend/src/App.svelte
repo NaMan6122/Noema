@@ -9,6 +9,7 @@
   import CommandPalette from './lib/CommandPalette.svelte';
   import PreviewPane from './lib/PreviewPane.svelte';
   import InfoPanel from './lib/InfoPanel.svelte';
+  import SearchBar from './lib/SearchBar.svelte';
 
   interface FileEntry {
     path: string;
@@ -57,6 +58,10 @@
   // Info panel
   let infoVisible = false;
 
+  // Search filter
+  let searchVisible = false;
+  let searchQuery = '';
+
   // Command palette
   let paletteVisible = false;
 
@@ -91,7 +96,10 @@
 
   $: activeTab = tabs.find(t => t.id === activeTabId);
   $: currentPath = activeTab?.path ?? '';
-  $: entries = activeTab?.entries ?? [];
+  $: rawEntries = activeTab?.entries ?? [];
+  $: entries = searchQuery
+    ? rawEntries.filter(e => e.filename.toLowerCase().includes(searchQuery.toLowerCase()))
+    : rawEntries;
   $: selectedPaths = activeTab?.selectedPaths ?? new Set<string>();
   $: sortField = activeTab?.sortField ?? 'name';
   $: sortDirection = activeTab?.sortDirection ?? 'asc';
@@ -533,6 +541,10 @@
     } else if ((e.metaKey || e.ctrlKey) && e.key === 'i') {
       e.preventDefault();
       infoVisible = !infoVisible;
+    } else if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
+      e.preventDefault();
+      searchVisible = !searchVisible;
+      if (!searchVisible) searchQuery = '';
     } else if (e.key === 'Delete' || (e.key === 'Backspace' && e.metaKey)) {
       handleDelete();
     } else if (e.key === ' ' && !e.metaKey && !e.ctrlKey) {
@@ -603,6 +615,11 @@
     <Sidebar {currentPath} onNavigate={navigateTo} />
 
     <div class="content-area">
+      <SearchBar
+        visible={searchVisible}
+        bind:query={searchQuery}
+        onClose={() => { searchVisible = false; searchQuery = ''; }}
+      />
       {#if loading}
         <div class="loading">Loading...</div>
       {:else}
