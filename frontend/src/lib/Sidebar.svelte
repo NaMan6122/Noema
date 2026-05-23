@@ -10,12 +10,20 @@
     kind: string;
   }
 
+  interface SmartFolder {
+    id: number;
+    name: string;
+    icon: string | null;
+  }
+
   export let currentPath: string;
   export let onNavigate: (path: string) => void;
+  export let onSmartFolder: ((id: number) => void) | null = null;
 
   let favorites: FavoriteEntry[] = [];
   let volumes: FavoriteEntry[] = [];
   let recents: FavoriteEntry[] = [];
+  let smartFolders: SmartFolder[] = [];
 
   const favoriteIcons: Record<string, string> = {
     Home: 'home',
@@ -37,6 +45,9 @@
     }
     try {
       recents = await invoke<FavoriteEntry[]>('get_recent_files');
+    } catch (_) {}
+    try {
+      smartFolders = await invoke<SmartFolder[]>('list_smart_folders');
     } catch (_) {}
   });
 
@@ -101,6 +112,22 @@
           >
             <span class="material-symbols-outlined">schedule</span>
             <span class="nav-label">{rec.name}</span>
+          </button>
+        {/each}
+      </section>
+    {/if}
+
+    {#if smartFolders.length > 0}
+      <section>
+        <h3 class="section-label">Smart Folders</h3>
+        {#each smartFolders as sf}
+          <button
+            class="nav-item"
+            on:click={() => onSmartFolder && onSmartFolder(sf.id)}
+            title={sf.name}
+          >
+            <span class="material-symbols-outlined">{sf.icon || 'auto_awesome_mosaic'}</span>
+            <span class="nav-label">{sf.name}</span>
           </button>
         {/each}
       </section>

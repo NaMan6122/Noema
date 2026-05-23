@@ -400,7 +400,7 @@
 <svelte:window on:keydown={handleKeydown} on:click={hideContextMenu} />
 
 <div class="app">
-  <Sidebar {currentPath} onNavigate={navigateTo} />
+  <Sidebar {currentPath} onNavigate={navigateTo} onSmartFolder={(id) => { globalSearchVisible = true; }} />
 
   <div class="main-area">
     <TabBar
