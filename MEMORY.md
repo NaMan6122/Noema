@@ -1,10 +1,10 @@
 # Agent Memory
 
 ## Active Task
-T-011 — Implement AI layer (ContextStore + LlmEngine stub)
+T-015 — UI polish pass (smart folders sidebar, AI panel)
 State: DONE
-Started: 2026-05-23 16:00
-Last Updated: 2026-05-23 16:30
+Started: 2026-05-23 17:00
+Last Updated: 2026-05-23 17:30
 
 ## Task Log
 
@@ -41,6 +41,26 @@ Last Updated: 2026-05-23 16:30
   - [x] IPC: generate_file_context, get_file_context, suggest_tags, suggest_filename, apply_ai_tags, edit_context
   - [x] Tests: 7 passing (4 context store + 3 llm engine)
 **Outcome:** Complete. 25 total tests pass. AI layer wired with stub backend; ready for real inference backend.
+**Blockers:** NONE
+
+### [2026-05-23 16:30] — T-012: Frontend AI Panel
+**Goal:** Add AI context display to InfoPanel (summary, entities, tags, actions)
+**Outcome:** Complete. InfoPanel shows AI context with analyze, accept tags, suggest rename buttons.
+**Blockers:** NONE
+
+### [2026-05-23 16:45] — T-013: OpenAI-compatible inference backend
+**Goal:** Implement real InferenceBackend using any OpenAI-compatible API
+**Outcome:** Complete. Configurable via AiConfig (api_base_url, api_key, api_model). Falls back to stub.
+**Blockers:** NONE
+
+### [2026-05-23 17:00] — T-014: Smart folders (virtual collections)
+**Goal:** Implement saved query-based virtual folders with CRUD and search integration
+**Outcome:** Complete. SmartFolderStore with 5 IPC commands, 3 new tests. 28 total tests pass.
+**Blockers:** NONE
+
+### [2026-05-23 17:15] — T-015: UI polish (smart folders sidebar, integration)
+**Goal:** Wire smart folders into sidebar, connect to GlobalSearch
+**Outcome:** Complete. Sidebar loads and displays smart folders, clicking opens search.
 **Blockers:** NONE
 
 ### [2026-05-23 12:00] — T-008: Implement full-text search (Week 8)
