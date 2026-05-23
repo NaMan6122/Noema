@@ -22,9 +22,7 @@
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
   $: if (visible) {
-    query = '';
-    results = [];
-    selectedIndex = 0;
+    query = ''; results = []; selectedIndex = 0;
     tick().then(() => inputEl?.focus());
   }
 
@@ -38,69 +36,54 @@
     if (!query.trim()) return;
     loading = true;
     try {
-      results = await invoke<SearchResult[]>('search_files', {
-        root: currentPath,
-        query: query.trim(),
-        limit: 50,
-      });
+      results = await invoke<SearchResult[]>('search_files', { root: currentPath, query: query.trim(), limit: 50 });
       selectedIndex = 0;
-    } catch (_) {
-      results = [];
-    }
+    } catch (_) { results = []; }
     loading = false;
   }
 
   function handleKeydown(e: KeyboardEvent) {
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      onClose();
-    } else if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      selectedIndex = Math.min(results.length - 1, selectedIndex + 1);
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      selectedIndex = Math.max(0, selectedIndex - 1);
-    } else if (e.key === 'Enter') {
-      e.preventDefault();
-      selectResult(selectedIndex);
-    }
+    if (e.key === 'Escape') { e.preventDefault(); onClose(); }
+    else if (e.key === 'ArrowDown') { e.preventDefault(); selectedIndex = Math.min(results.length - 1, selectedIndex + 1); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); selectedIndex = Math.max(0, selectedIndex - 1); }
+    else if (e.key === 'Enter') { e.preventDefault(); selectResult(selectedIndex); }
   }
 
   function selectResult(idx: number) {
     const r = results[idx];
     if (!r) return;
-    if (r.is_dir) {
-      onNavigate(r.path);
-    } else {
-      const parent = r.path.split('/').slice(0, -1).join('/') || '/';
-      onNavigate(parent);
-    }
+    if (r.is_dir) { onNavigate(r.path); }
+    else { const parent = r.path.split('/').slice(0, -1).join('/') || '/'; onNavigate(parent); }
     onClose();
   }
 
   function getIcon(r: SearchResult): string {
-    if (r.is_dir) return '📁';
+    if (r.is_dir) return 'folder';
     const ext = r.extension?.toLowerCase();
-    if (!ext) return '📄';
-    if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext)) return '🖼️';
-    if (['rs', 'py', 'js', 'ts'].includes(ext)) return '⚙️';
-    if (['pdf'].includes(ext)) return '📕';
-    return '📄';
+    if (!ext) return 'description';
+    if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext)) return 'image';
+    if (['rs', 'py', 'js', 'ts'].includes(ext)) return 'code';
+    if (['pdf'].includes(ext)) return 'picture_as_pdf';
+    return 'description';
   }
 </script>
 
 {#if visible}
-  <div class="global-search-overlay" on:click|self={onClose}>
-    <div class="global-search" on:keydown={handleKeydown}>
-      <input
-        class="global-search-input"
-        type="text"
-        bind:value={query}
-        bind:this={inputEl}
-        on:input={handleInput}
-        placeholder="Search files..."
-      />
-      <div class="global-search-results">
+  <div class="overlay" on:click|self={onClose}>
+    <div class="search-palette" on:keydown={handleKeydown}>
+      <div class="search-header">
+        <span class="material-symbols-outlined header-icon">search</span>
+        <input
+          class="search-input"
+          type="text"
+          bind:value={query}
+          bind:this={inputEl}
+          on:input={handleInput}
+          placeholder="Search files, contents, or ask a question..."
+        />
+        <div class="esc-badge"><span>ESC</span></div>
+      </div>
+      <div class="search-results">
         {#if loading}
           <div class="search-status">Searching...</div>
         {:else if query && results.length === 0}
@@ -108,12 +91,12 @@
         {:else}
           {#each results as result, i}
             <button
-              class="search-result"
+              class="result-item"
               class:selected={i === selectedIndex}
               on:click={() => selectResult(i)}
               on:mouseenter={() => selectedIndex = i}
             >
-              <span class="result-icon">{getIcon(result)}</span>
+              <span class="material-symbols-outlined result-icon">{getIcon(result)}</span>
               <div class="result-info">
                 <span class="result-name">{result.filename}</span>
                 <span class="result-path">{result.path}</span>
@@ -122,82 +105,135 @@
           {/each}
         {/if}
       </div>
+      <div class="search-footer">
+        <div class="footer-hints">
+          <div class="hint-group">
+            <span class="hint-key"><span class="material-symbols-outlined" style="font-size: 14px;">keyboard_arrow_up</span></span>
+            <span class="hint-key"><span class="material-symbols-outlined" style="font-size: 14px;">keyboard_arrow_down</span></span>
+            <span class="hint-label">to navigate</span>
+          </div>
+          <div class="hint-group">
+            <span class="hint-key">Enter</span>
+            <span class="hint-label">to open</span>
+          </div>
+        </div>
+        <div class="footer-brand">
+          <span class="hint-label">Search powered by</span>
+          <span class="brand-text">Noema Intelligence</span>
+        </div>
+      </div>
     </div>
   </div>
 {/if}
 
 <style>
-  .global-search-overlay {
+  .overlay {
     position: fixed;
     inset: 0;
     background: var(--overlay);
+    backdrop-filter: blur(8px);
     display: flex;
     justify-content: center;
-    padding-top: 15vh;
+    padding-top: 12vh;
     z-index: 2000;
   }
 
-  .global-search {
-    width: 550px;
-    max-height: 450px;
-    background: var(--bg-base);
-    border: 1px solid var(--bg-surface1);
-    border-radius: 10px;
+  .search-palette {
+    width: 680px;
+    max-height: 560px;
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px);
+    border: 1px solid var(--text-outline);
+    border-radius: 12px;
     overflow: hidden;
-    box-shadow: 0 8px 32px var(--shadow);
+    box-shadow: 0 8px 32px var(--shadow), inset 0 0 15px rgba(208, 188, 255, 0.05), 0 0 20px rgba(208, 188, 255, 0.1);
     display: flex;
     flex-direction: column;
     align-self: flex-start;
   }
 
-  .global-search-input {
-    padding: 14px 18px;
+  .search-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--text-outline);
+  }
+
+  .header-icon {
+    color: var(--accent-primary);
+    font-size: 20px;
+  }
+
+  .search-input {
+    flex: 1;
     border: none;
-    border-bottom: 1px solid var(--bg-surface0);
     background: transparent;
     color: var(--text-primary);
-    font-size: 15px;
+    font-family: var(--font-display);
+    font-size: 18px;
+    font-weight: 500;
     outline: none;
+    letter-spacing: -0.01em;
   }
 
-  .global-search-input::placeholder {
-    color: var(--text-muted);
+  .search-input::placeholder {
+    color: var(--text-outline);
   }
 
-  .global-search-results {
+  .esc-badge {
+    display: flex;
+    align-items: center;
+    padding: 4px 8px;
+    background: var(--bg-container-highest);
+    border-radius: 6px;
+    border: 1px solid var(--text-outline);
+  }
+
+  .esc-badge span {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-secondary);
+  }
+
+  .search-results {
     overflow-y: auto;
-    max-height: 370px;
-    padding: 4px 0;
+    max-height: 400px;
+    padding: 4px;
   }
 
   .search-status {
-    padding: 16px 18px;
+    padding: 24px 20px;
     color: var(--text-muted);
     font-size: 13px;
     text-align: center;
   }
 
-  .search-result {
+  .result-item {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 12px;
     width: 100%;
-    padding: 8px 18px;
-    border: none;
+    padding: 12px 16px;
+    border: 1px solid transparent;
+    border-radius: 8px;
     background: none;
     color: var(--text-primary);
     font-size: 13px;
     text-align: left;
     cursor: pointer;
+    transition: all 0.15s;
   }
 
-  .search-result:hover,
-  .search-result.selected {
-    background: var(--bg-surface0);
+  .result-item:hover,
+  .result-item.selected {
+    background: var(--bg-container-high);
+    border-color: var(--text-outline);
   }
 
   .result-icon {
-    font-size: 16px;
+    color: var(--text-secondary);
+    font-size: 20px;
     flex-shrink: 0;
   }
 
@@ -208,6 +244,8 @@
   }
 
   .result-name {
+    font-family: var(--font-display);
+    font-size: 15px;
     font-weight: 500;
   }
 
@@ -217,5 +255,58 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    font-family: var(--font-mono);
+  }
+
+  .search-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 20px;
+    border-top: 1px solid var(--text-outline);
+    background: var(--bg-container-lowest, rgba(14, 14, 14, 0.5));
+  }
+
+  .footer-hints {
+    display: flex;
+    gap: 16px;
+  }
+
+  .hint-group {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .hint-key {
+    display: flex;
+    align-items: center;
+    padding: 2px 6px;
+    background: var(--bg-container-highest);
+    border-radius: 4px;
+    border: 1px solid var(--text-outline);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-secondary);
+  }
+
+  .hint-label {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-muted);
+  }
+
+  .footer-brand {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .brand-text {
+    font-family: var(--font-display);
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--accent-primary);
+    letter-spacing: -0.02em;
   }
 </style>

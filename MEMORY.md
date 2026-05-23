@@ -49,7 +49,26 @@
 
 **Completed:** 2026-05-22
 
-#### Weeks 5–6: Not started
+#### Week 5: Search & Preview — Partial
+- [x] 5.1 Global filename search (Cmd+P) — GlobalSearch.svelte
+- [x] 5.2 Preview pane — PreviewPane.svelte
+- [x] 5.3 Info panel — InfoPanel.svelte
+- [x] 5.4 Recent files tracking — sidebar display
+
+#### Week 6: UI Polish & Theming — DONE
+- [x] 6.1 Stitch design system adherence (dark mode reference)
+- [x] 6.2 Material Symbols Outlined icons (replaced emoji)
+- [x] 6.3 Geist/Inter/JetBrains Mono font stack
+- [x] 6.4 CSS custom properties architecture
+- [x] 6.5 Terminal integration + disk space status bar
+- [x] 6.6 Theme system: dark + light + system preference
+  - Backend: `get_theme`/`set_theme` Tauri IPC commands
+  - Frontend: themeStore.ts (writable/derived stores, OS media query listener)
+  - CSS: `[data-theme="dark"]` / `[data-theme="light"]` with M3 Fidelity tokens
+  - FOUC prevention via localStorage inline script
+  - Sidebar toggle: cycles system → light → dark
+
+**Completed:** 2026-05-23
 
 ### Key Commits
 | Date | Commit | Description |
@@ -63,7 +82,11 @@
 | 2026-05-22 | 326df9c | Add tab system with per-tab state and drag-to-reorder |
 | 2026-05-22 | 87e8feb | Add keyboard navigation to file list |
 | 2026-05-22 | f56233c | Add command palette with Cmd+K shortcut |
-| 2026-05-22 | ee17728 | Add workspace save/restore for session persistence |
+| 2026-05-22 | 7b32097 | Add global filename search with Cmd+P shortcut |
+| 2026-05-22 | 44a2ca0 | Add recent files tracking and sidebar display |
+| 2026-05-22 | 2a43610 | Add theme support with CSS custom properties |
+| 2026-05-22 | 8106a9b | Add terminal integration and disk space status bar |
+| 2026-05-23 | — | Theme system: dark/light/system with M3 Fidelity tokens |
 
 ### Architecture Decisions
 - All-Rust backend, Tauri shell, Svelte frontend
@@ -72,7 +95,7 @@
 - 6 crates: noema-core, noema-fs, noema-index, noema-search, noema-ai, noema-app
 
 ### Current Branch
-`feature/noema_fs_core` — File system and core infrastructure work
+`main` — All features merged
 
 ---
-*Last updated: 2026-05-22*
+*Last updated: 2026-05-23*

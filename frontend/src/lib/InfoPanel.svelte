@@ -22,33 +22,32 @@
   $: if (!visible) info = null;
 
   async function loadInfo(p: string) {
-    try {
-      info = await invoke<FileInfo>('get_file_info', { path: p });
-    } catch (_) {
-      info = null;
-    }
+    try { info = await invoke<FileInfo>('get_file_info', { path: p }); }
+    catch (_) { info = null; }
   }
 
   function formatSize(bytes: number): string {
     if (bytes === 0) return '0 B';
     const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-    let i = 0;
-    let size = bytes;
+    let i = 0; let size = bytes;
     while (size >= 1024 && i < units.length - 1) { size /= 1024; i++; }
     return `${size.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
   }
 
-  function formatDate(iso: string): string {
-    return new Date(iso).toLocaleString();
-  }
+  function formatDate(iso: string): string { return new Date(iso).toLocaleString(); }
 </script>
 
 {#if visible && info}
-  <div class="info-panel-overlay" on:click|self={() => visible = false}>
-    <div class="info-panel">
+  <div class="info-overlay" on:click|self={() => visible = false}>
+    <div class="info-panel glass-panel">
       <div class="info-header">
-        <span class="info-title">Info</span>
-        <button class="info-close" on:click={() => visible = false}>×</button>
+        <div class="info-header-left">
+          <span class="material-symbols-outlined" style="color: var(--accent-primary); font-size: 18px;">info</span>
+          <span class="info-title">File Info</span>
+        </div>
+        <button class="info-close" on:click={() => visible = false}>
+          <span class="material-symbols-outlined" style="font-size: 16px;">close</span>
+        </button>
       </div>
       <div class="info-body">
         <div class="info-row"><span class="info-label">Name</span><span class="info-value">{info.filename}</span></div>
@@ -69,10 +68,11 @@
 {/if}
 
 <style>
-  .info-panel-overlay {
+  .info-overlay {
     position: fixed;
     inset: 0;
-    background: var(--shadow);
+    background: var(--overlay);
+    backdrop-filter: blur(8px);
     display: flex;
     justify-content: center;
     align-items: center;
@@ -80,10 +80,9 @@
   }
 
   .info-panel {
-    width: 380px;
-    background: var(--bg-base);
-    border: 1px solid var(--bg-surface1);
-    border-radius: 10px;
+    width: 400px;
+    border: 1px solid var(--text-outline);
+    border-radius: 12px;
     box-shadow: 0 8px 32px var(--shadow);
     overflow: hidden;
   }
@@ -92,44 +91,53 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 12px 16px;
-    border-bottom: 1px solid var(--bg-surface0);
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--text-outline);
+  }
+
+  .info-header-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
   }
 
   .info-title {
-    font-weight: 600;
+    font-family: var(--font-display);
+    font-weight: 500;
     color: var(--text-primary);
-    font-size: 14px;
+    font-size: 15px;
   }
 
   .info-close {
     border: none;
     background: none;
     color: var(--text-muted);
-    font-size: 18px;
     cursor: pointer;
-    padding: 0 4px;
+    padding: 4px;
+    border-radius: 4px;
+    display: flex;
   }
 
   .info-close:hover {
     color: var(--text-primary);
+    background: var(--bg-container-high);
   }
 
   .info-body {
-    padding: 12px 16px;
+    padding: 14px 16px;
   }
 
   .info-body hr {
     border: none;
-    border-top: 1px solid var(--bg-surface0);
-    margin: 8px 0;
+    border-top: 1px solid var(--text-outline);
+    margin: 10px 0;
   }
 
   .info-row {
     display: flex;
     justify-content: space-between;
     gap: 12px;
-    padding: 4px 0;
+    padding: 5px 0;
     font-size: 12px;
   }
 
@@ -137,6 +145,7 @@
     color: var(--text-muted);
     flex-shrink: 0;
     min-width: 80px;
+    font-weight: 500;
   }
 
   .info-value {
@@ -147,10 +156,10 @@
 
   .info-value.path {
     font-size: 11px;
-    font-family: 'SF Mono', Monaco, monospace;
+    font-family: var(--font-mono);
   }
 
   .info-value.mono {
-    font-family: 'SF Mono', Monaco, monospace;
+    font-family: var(--font-mono);
   }
 </style>

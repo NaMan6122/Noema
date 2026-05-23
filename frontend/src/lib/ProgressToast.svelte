@@ -20,40 +20,25 @@
 
     listen<{ id: string; opType: string; totalItems: number }>('op:started', (e) => {
       operations = [...operations, {
-        id: e.payload.id,
-        opType: e.payload.opType,
-        totalItems: e.payload.totalItems,
-        processed: 0,
-        current: '',
-        done: false,
-        success: true,
-        error: null,
+        id: e.payload.id, opType: e.payload.opType, totalItems: e.payload.totalItems,
+        processed: 0, current: '', done: false, success: true, error: null,
       }];
     }).then(u => unlisteners.push(u));
 
     listen<{ id: string; processed: number; current: string }>('op:progress', (e) => {
       operations = operations.map(op =>
-        op.id === e.payload.id
-          ? { ...op, processed: e.payload.processed, current: e.payload.current }
-          : op
+        op.id === e.payload.id ? { ...op, processed: e.payload.processed, current: e.payload.current } : op
       );
     }).then(u => unlisteners.push(u));
 
     listen<{ id: string; success: boolean; error: string | null }>('op:complete', (e) => {
       operations = operations.map(op =>
-        op.id === e.payload.id
-          ? { ...op, done: true, success: e.payload.success, error: e.payload.error }
-          : op
+        op.id === e.payload.id ? { ...op, done: true, success: e.payload.success, error: e.payload.error } : op
       );
-      // Auto-dismiss after 3s
-      setTimeout(() => {
-        operations = operations.filter(op => op.id !== e.payload.id);
-      }, 3000);
+      setTimeout(() => { operations = operations.filter(op => op.id !== e.payload.id); }, 3000);
     }).then(u => unlisteners.push(u));
 
-    return () => {
-      unlisteners.forEach(u => u());
-    };
+    return () => { unlisteners.forEach(u => u()); };
   });
 
   function getLabel(op: OpState): string {
@@ -72,7 +57,7 @@
 {#if operations.length > 0}
   <div class="toast-container">
     {#each operations as op (op.id)}
-      <div class="toast" class:error={op.done && !op.success}>
+      <div class="toast glass-panel" class:error={op.done && !op.success}>
         <div class="toast-header">
           <span>{getLabel(op)}</span>
           <span class="percent">{op.done ? '' : `${getPercent(op)}%`}</span>
@@ -95,7 +80,7 @@
   .toast-container {
     position: fixed;
     bottom: 32px;
-    right: 16px;
+    right: 48px;
     display: flex;
     flex-direction: column;
     gap: 8px;
@@ -104,15 +89,14 @@
   }
 
   .toast {
-    background: var(--bg-surface0);
-    border: 1px solid var(--bg-surface1);
+    border: 1px solid var(--text-outline);
     border-radius: 8px;
-    padding: 10px 14px;
-    box-shadow: 0 4px 12px var(--shadow);
+    padding: 12px 14px;
+    box-shadow: 0 4px 16px var(--shadow);
   }
 
   .toast.error {
-    border-color: var(--accent-red);
+    border-color: var(--accent-error);
   }
 
   .toast-header {
@@ -121,28 +105,32 @@
     font-size: 12px;
     color: var(--text-primary);
     margin-bottom: 6px;
+    font-weight: 500;
   }
 
   .percent {
-    color: var(--text-subtext);
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
   }
 
   .progress-bar {
-    height: 4px;
-    background: var(--bg-surface1);
+    height: 3px;
+    background: var(--bg-container-highest);
     border-radius: 2px;
     overflow: hidden;
   }
 
   .progress-fill {
     height: 100%;
-    background: var(--accent-blue);
+    background: var(--accent-primary);
     transition: width 0.2s;
+    box-shadow: 0 0 8px rgba(208, 188, 255, 0.6);
   }
 
   .current-file {
     margin-top: 4px;
     font-size: 11px;
+    font-family: var(--font-mono);
     color: var(--text-muted);
     overflow: hidden;
     text-overflow: ellipsis;
@@ -152,6 +140,6 @@
   .error-msg {
     margin-top: 4px;
     font-size: 11px;
-    color: var(--accent-red);
+    color: var(--accent-error);
   }
 </style>
