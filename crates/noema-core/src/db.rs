@@ -78,6 +78,7 @@ impl Database {
                 token_count INTEGER NOT NULL,
                 heading     TEXT,
                 chunk_type  TEXT DEFAULT 'text',
+                embedding   BLOB,
                 UNIQUE(file_id, chunk_index)
             );
             CREATE INDEX IF NOT EXISTS idx_chunks_file ON chunks(file_id);

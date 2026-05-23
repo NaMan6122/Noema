@@ -4,13 +4,16 @@ use std::time::Instant;
 
 use noema_core::db::Database;
 use noema_core::error::Result;
+use noema_index::embeddings::{bytes_to_embedding, cosine_similarity, EmbeddingEngine};
 use rusqlite::params;
 use serde::Serialize;
+use tokio::sync::Mutex;
 
 use crate::query::{Filter, ParsedQuery};
 
 pub struct SearchEngine {
     db: Arc<Database>,
+    embedder: Option<Arc<Mutex<EmbeddingEngine>>>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -37,24 +40,160 @@ pub struct SearchResults {
 
 impl SearchEngine {
     pub fn new(db: Arc<Database>) -> Self {
-        Self { db }
+        Self { db, embedder: None }
     }
 
-    pub fn search(&self, query: &ParsedQuery, limit: usize, offset: usize) -> Result<SearchResults> {
+    pub fn with_embedder(mut self, embedder: Arc<Mutex<EmbeddingEngine>>) -> Self {
+        self.embedder = Some(embedder);
+        self
+    }
+
+    pub async fn search(&self, query: &ParsedQuery, limit: usize, offset: usize) -> Result<SearchResults> {
         let start = Instant::now();
 
-        // If no text and no filters, return recent files
         if query.keyword_text.is_none() && query.exact_phrases.is_empty() && query.filters.is_empty() {
             return self.recent_files(limit);
         }
 
-        // If only filters, no text — metadata-only search
         if query.keyword_text.is_none() && query.exact_phrases.is_empty() {
             return self.filter_only_search(&query.filters, limit, offset, start);
         }
 
-        // FTS5 search
+        // Try hybrid search if embedder available
+        if self.embedder.is_some() && query.semantic_text.is_some() {
+            return self.hybrid_search(query, limit, offset, start).await;
+        }
+
         self.fts_search(query, limit, offset, start)
+    }
+
+    async fn hybrid_search(
+        &self,
+        query: &ParsedQuery,
+        limit: usize,
+        offset: usize,
+        start: Instant,
+    ) -> Result<SearchResults> {
+        let semantic_text = query.semantic_text.as_deref().unwrap_or("");
+
+        // Get FTS results
+        let fts_results = self.fts_search(query, 100, 0, start)?;
+
+        // Get vector results
+        let vector_results = self.vector_search(semantic_text, 100).await?;
+
+        // RRF fusion (k=60)
+        let k = 60.0f32;
+        let mut scores: std::collections::HashMap<String, (f32, Option<HighlightedSnippet>, String)> = std::collections::HashMap::new();
+
+        for (rank, result) in fts_results.results.iter().enumerate() {
+            let rrf_score = 1.0 / (k + rank as f32 + 1.0);
+            let entry = scores.entry(result.file_path.clone()).or_insert((0.0, result.snippet.clone(), result.filename.clone()));
+            entry.0 += rrf_score;
+        }
+
+        for (rank, (path, filename, sim)) in vector_results.iter().enumerate() {
+            let rrf_score = 1.0 / (k + rank as f32 + 1.0);
+            let entry = scores.entry(path.clone()).or_insert((0.0, None, filename.clone()));
+            entry.0 += rrf_score;
+        }
+
+        let mut merged: Vec<SearchResult> = scores
+            .into_iter()
+            .map(|(path, (score, snippet, filename))| SearchResult {
+                file_path: path,
+                filename,
+                score,
+                snippet,
+                match_type: "Hybrid".to_string(),
+            })
+            .collect();
+
+        merged.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+
+        // Apply filters as post-filter
+        let filtered = self.apply_filters(merged, &query.filters);
+        let total = filtered.len() as u64;
+        let results: Vec<SearchResult> = filtered.into_iter().skip(offset).take(limit).collect();
+
+        Ok(SearchResults {
+            results,
+            total_estimate: total,
+            took_ms: start.elapsed().as_millis() as u64,
+        })
+    }
+
+    async fn vector_search(&self, query_text: &str, limit: usize) -> Result<Vec<(String, String, f32)>> {
+        let embedder = match &self.embedder {
+            Some(e) => e,
+            None => return Ok(vec![]),
+        };
+
+        let query_embedding = {
+            let emb = embedder.lock().await;
+            emb.embed_query(query_text)?
+        };
+
+        let conn = self.db.connection()?;
+        let mut stmt = conn.prepare(
+            "SELECT c.embedding, f.path, f.filename
+             FROM chunks c
+             JOIN files f ON f.id = c.file_id
+             WHERE c.embedding IS NOT NULL"
+        )?;
+
+        let rows = stmt.query_map([], |row| {
+            let blob: Vec<u8> = row.get(0)?;
+            let path: String = row.get(1)?;
+            let filename: String = row.get(2)?;
+            Ok((blob, path, filename))
+        })?;
+
+        let mut scored: Vec<(String, String, f32)> = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+
+        for row in rows {
+            let (blob, path, filename) = row?;
+            if seen.contains(&path) {
+                continue;
+            }
+            let embedding = bytes_to_embedding(&blob);
+            let sim = cosine_similarity(&query_embedding, &embedding);
+            if sim > 0.3 {
+                seen.insert(path.clone());
+                scored.push((path, filename, sim));
+            }
+        }
+
+        scored.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap_or(std::cmp::Ordering::Equal));
+        scored.truncate(limit);
+
+        Ok(scored)
+    }
+
+    fn apply_filters(&self, results: Vec<SearchResult>, filters: &[Filter]) -> Vec<SearchResult> {
+        if filters.is_empty() {
+            return results;
+        }
+        results.into_iter().filter(|r| {
+            for filter in filters {
+                match filter {
+                    Filter::InPath(path) => {
+                        if !r.file_path.starts_with(&path.to_string_lossy().as_ref()) {
+                            return false;
+                        }
+                    }
+                    Filter::FileType(types) => {
+                        let ext = r.file_path.rsplit('.').next().unwrap_or("");
+                        if !types.iter().any(|t| t == ext) {
+                            return false;
+                        }
+                    }
+                    _ => {} // other filters handled at DB level
+                }
+            }
+            true
+        }).collect()
     }
 
     fn fts_search(
