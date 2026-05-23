@@ -327,6 +327,10 @@ impl IndexerPipeline {
         if self.is_user_active() { 1 } else { 8 }
     }
 
+    pub fn db(&self) -> &Arc<Database> {
+        &self.db
+    }
+
     pub async fn status(&self) -> IndexStatus {
         let state = if !self.running.load(Ordering::Relaxed) {
             IndexState::Idle

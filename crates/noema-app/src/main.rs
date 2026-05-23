@@ -649,6 +649,44 @@ fn main() {
         100, // max_file_size_mb
     ));
 
+    let indexer_for_watcher = indexer.clone();
+    let mut watcher_rx = event_bus.subscribe();
+    tauri::async_runtime::spawn(async move {
+        while let Ok(event) = watcher_rx.recv().await {
+            match event {
+                AppEvent::FileChanged { path, change } => {
+                    use noema_core::events::ChangeType;
+                    match change {
+                        ChangeType::Created | ChangeType::Modified => {
+                            if path.is_file() {
+                                indexer_for_watcher.enqueue(IndexJob {
+                                    path,
+                                    priority: Priority::Normal,
+                                    reason: IndexReason::NewFile,
+                                });
+                                indexer_for_watcher.start().await;
+                            }
+                        }
+                        ChangeType::Deleted => {
+                            let _ = noema_index::db::remove_file_record(
+                                &indexer_for_watcher.db(),
+                                &path,
+                            );
+                        }
+                        ChangeType::Renamed { from } => {
+                            let _ = noema_index::db::update_file_path(
+                                &indexer_for_watcher.db(),
+                                &from,
+                                &path,
+                            );
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+    });
+
     let app_state = AppState {
         fs_engine,
         thumb_service,
