@@ -12,6 +12,8 @@ use noema_fs::ops::FileOpsEngine;
 use noema_fs::thumbs::ThumbnailService;
 use noema_index::parser::ParserRegistry;
 use noema_index::pipeline::{IndexJob, IndexReason, IndexState, IndexerPipeline, Priority};
+use noema_search::engine::SearchEngine;
+use noema_search::query::QueryParser;
 use serde::Serialize;
 use tauri::{Emitter, State};
 
@@ -22,6 +24,7 @@ struct AppState {
     event_bus: Arc<EventBus>,
     db: Arc<Database>,
     indexer: Arc<IndexerPipeline>,
+    search_engine: Arc<SearchEngine>,
 }
 
 #[derive(Serialize)]
@@ -623,6 +626,30 @@ async fn resume_indexing(state: State<'_, AppState>) -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+async fn content_search(
+    query: String,
+    limit: Option<usize>,
+    offset: Option<usize>,
+    state: State<'_, AppState>,
+) -> Result<serde_json::Value, String> {
+    let parsed = QueryParser.parse(&query);
+    let results = state.search_engine.search(&parsed, limit.unwrap_or(20), offset.unwrap_or(0))
+        .map_err(|e| e.to_string())?;
+
+    Ok(serde_json::json!({
+        "results": results.results,
+        "totalEstimate": results.total_estimate,
+        "tookMs": results.took_ms,
+    }))
+}
+
+#[tauri::command]
+async fn find_duplicates(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+    let groups = state.search_engine.find_duplicates().map_err(|e| e.to_string())?;
+    Ok(serde_json::json!(groups))
+}
+
 fn main() {
     tracing_subscriber::fmt::init();
 
@@ -648,6 +675,8 @@ fn main() {
         event_bus.clone(),
         100, // max_file_size_mb
     ));
+
+    let search_engine = Arc::new(SearchEngine::new(db.clone()));
 
     let indexer_for_watcher = indexer.clone();
     let mut watcher_rx = event_bus.subscribe();
@@ -694,6 +723,7 @@ fn main() {
         event_bus: event_bus.clone(),
         db,
         indexer,
+        search_engine,
     };
 
     tauri::Builder::default()
@@ -774,6 +804,8 @@ fn main() {
             get_index_status,
             pause_indexing,
             resume_indexing,
+            content_search,
+            find_duplicates,
         ])
         .run(tauri::generate_context!())
         .expect("error running Noema");
