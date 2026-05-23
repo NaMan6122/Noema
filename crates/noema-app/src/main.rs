@@ -10,6 +10,7 @@ use noema_core::types::{FileEntry, SortDirection, SortField, SortOrder};
 use noema_fs::highlight::Highlighter;
 use noema_fs::ops::FileOpsEngine;
 use noema_fs::thumbs::ThumbnailService;
+use noema_index::embeddings::EmbeddingEngine;
 use noema_index::parser::ParserRegistry;
 use noema_index::pipeline::{IndexJob, IndexReason, IndexState, IndexerPipeline, Priority};
 use noema_search::engine::SearchEngine;
@@ -634,7 +635,7 @@ async fn content_search(
     state: State<'_, AppState>,
 ) -> Result<serde_json::Value, String> {
     let parsed = QueryParser.parse(&query);
-    let results = state.search_engine.search(&parsed, limit.unwrap_or(20), offset.unwrap_or(0))
+    let results = state.search_engine.search(&parsed, limit.unwrap_or(20), offset.unwrap_or(0)).await
         .map_err(|e| e.to_string())?;
 
     Ok(serde_json::json!({
@@ -669,14 +670,36 @@ fn main() {
     let highlighter = Arc::new(Highlighter::new());
 
     let parser_registry = Arc::new(ParserRegistry::with_defaults());
-    let indexer = Arc::new(IndexerPipeline::new(
+
+    // Try to load embedding model — gracefully degrade to FTS-only if unavailable
+    let model_dir = data_dir.join("models").join("bge-small");
+    let embedder = match EmbeddingEngine::load(&model_dir) {
+        Ok(engine) => {
+            tracing::info!("Embedding engine loaded from {:?}", model_dir);
+            Some(Arc::new(tokio::sync::Mutex::new(engine)))
+        }
+        Err(e) => {
+            tracing::warn!("Embedding model not available ({e}), running in FTS-only mode");
+            None
+        }
+    };
+
+    let mut indexer = IndexerPipeline::new(
         parser_registry,
         db.clone(),
         event_bus.clone(),
         100, // max_file_size_mb
-    ));
+    );
+    if let Some(ref emb) = embedder {
+        indexer = indexer.with_embedder(emb.clone());
+    }
+    let indexer = Arc::new(indexer);
 
-    let search_engine = Arc::new(SearchEngine::new(db.clone()));
+    let mut search_engine = SearchEngine::new(db.clone());
+    if let Some(ref emb) = embedder {
+        search_engine = search_engine.with_embedder(emb.clone());
+    }
+    let search_engine = Arc::new(search_engine);
 
     let indexer_for_watcher = indexer.clone();
     let mut watcher_rx = event_bus.subscribe();
