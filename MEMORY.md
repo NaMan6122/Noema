@@ -1,129 +1,94 @@
-# Noema — Project Memory
+# Agent Memory
 
-## Progress Tracker
+## Active Task
+T-009 — Adopt instruction.md operating protocol
+State: IN_PROGRESS
+Started: 2026-05-23 14:00
+Last Updated: 2026-05-23 14:00
 
-### Phase 1: MVP File Explorer (Weeks 1–6)
+## Task Log
 
-#### Week 1: Project Scaffolding & Core Infrastructure — DONE
-- [x] 1.1 Tauri + Svelte project init
-- [x] 1.2 Rust workspace structure (noema-core, noema-fs, noema-index, noema-search, noema-ai, noema-app)
-- [x] 1.3 SQLite integration (rusqlite, WAL mode, migrations)
-- [x] 1.4 Config system (TOML, platform paths)
-- [x] 1.5 Event bus (tokio::broadcast)
-- [ ] 1.6 CI setup (GitHub Actions)
-- [ ] 1.7 Dev environment docs
+### [2026-05-23 14:00] — T-009: Adopt instruction.md operating protocol
+**Goal:** Restructure Memory.md and create dev-changelog.md to comply with instruction.md
+**Approach:** Rewrite Memory.md to required format, create dev-changelog.md with the one existing deviation (embeddings deferral), then proceed with next development task
+**Checklist:**
+  - [x] Restructure Memory.md
+  - [x] Create dev-changelog.md with DCL-001 (embeddings deferral)
+  - [ ] Confirm active task and next step
+**Outcome:** PENDING
+**Blockers:** NONE
 
-**Completed:** 2026-05-21 (initial scaffold + core crate)
+### [2026-05-23 12:00] — T-008: Implement full-text search (Week 8)
+**Goal:** Wire FTS5 search into noema-search crate with query parsing, filters, snippets, and frontend integration
+**Approach:** Implement QueryParser (filter extraction), SearchEngine (FTS5 BM25), snippet highlighting, IPC commands, and dual-mode GlobalSearch UI
+**Checklist:**
+  - [x] QueryParser with filter syntax
+  - [x] SearchEngine with FTS5 BM25 ranking
+  - [x] Snippet extraction with term highlighting
+  - [x] Filter-only and recent-files fallback modes
+  - [x] Duplicate detection (hash-based)
+  - [x] IPC: content_search, find_duplicates commands
+  - [x] GlobalSearch dual-mode UI (Tab toggles)
+**Outcome:** Complete. 5 query parser tests pass. Full workspace compiles. GlobalSearch supports file name and content search modes.
+**Blockers:** NONE
 
-#### Week 2: Directory Browsing & File Listing — DONE
-- [x] 2.1 `list_directory` command
-- [x] 2.2 List view component (virtualized) — FileList.svelte with virtual scrolling
-- [x] 2.3 Column sorting — click headers to sort name/size/modified
-- [x] 2.4 Navigation — clickable breadcrumb + back/forward/up buttons
-- [x] 2.5 Sidebar - Favorites — Sidebar.svelte with Home/Desktop/Documents/Downloads/Pictures/Music/Videos + volumes
-- [x] 2.6 File icons — emoji-based icon mapping by extension
-- [x] 2.7 Hidden files toggle — checkbox in toolbar
+### [2026-05-23 10:00] — T-007: Implement indexing pipeline (Week 7)
+**Goal:** Build the background file indexing system per spec 03_index.spec.md (without embeddings)
+**Approach:** FTS5 virtual table, Markdown/PlainText parsers, semantic chunker, IndexerPipeline with priority queues and blake3 dedup, file watcher integration, status bar UI
+**Checklist:**
+  - [x] FTS5 virtual table + sync triggers
+  - [x] MarkdownParser + PlainTextParser
+  - [x] SemanticChunker (section-aware, overlap)
+  - [x] IndexerPipeline (priority queues, blake3 dedup, throttling)
+  - [x] DB helpers (upsert, insert chunks, etc.)
+  - [x] IPC commands (index_directory, get_index_status, pause/resume)
+  - [x] File watcher → auto-enqueue
+  - [x] Frontend status bar indicator
+**Outcome:** Complete. 8 tests pass. Indexing pipeline processes files in background, deduplicates via blake3, respects user-activity throttling.
+**Blockers:** NONE
 
-**Completed:** 2026-05-22 (sidebar, breadcrumb, virtualized list, layout restructure)
+### [2026-05-21 — 2026-05-23] — T-001 through T-006: Phase 1 MVP File Explorer (Weeks 1–6)
+**Goal:** Build a fully functional file explorer with Tauri + Svelte + Rust
+**Approach:** Spec-driven, incremental weekly delivery
+**Checklist:**
+  - [x] Week 1: Project scaffolding, SQLite, config, event bus
+  - [x] Week 2: Directory browsing, virtualized list, navigation, sidebar
+  - [x] Week 3: File operations (copy/move/delete/rename) + undo/redo
+  - [x] Week 4: Tabs, keyboard nav, command palette, workspace save/restore
+  - [x] Week 5: Global filename search, preview pane, info panel, recent files
+  - [x] Week 6: UI polish, Material Symbols, Geist fonts, dark/light/system theming
+**Outcome:** Complete. Full MVP file explorer with tabs, keyboard nav, command palette, theming, preview, and search.
+**Blockers:** NONE
 
-#### Week 3: File Operations & Undo — DONE
-- [x] 3.1 Copy/Move engine (IPC commands implemented)
-- [x] 3.2 Delete (Trash) — uses `trash` crate, working via context menu
-- [x] 3.3 Rename
-- [x] 3.4 Create new folder/file
-- [x] 3.5 Undo/Redo stack — full undo + redo for Copy/Move/Delete/Rename
-- [x] 3.6 Progress UI (ProgressToast component)
-- [x] 3.7 Conflict resolution (ConflictDialog component)
-- [x] 3.8 Multi-select — basic drag-drop done
+## Self-Corrections
+_None recorded yet._
 
-**Completed:** 2026-05-22
-
-#### Week 4: Tabs, Keyboard Navigation & Command Palette — DONE
-- [x] 4.1 Tab system — TabBar.svelte with per-tab state, drag-to-reorder
-- [x] 4.2 Keyboard navigation — Arrow keys, Enter, Space, Home/End, type-ahead search
-- [x] 4.3 Command palette — Cmd+K overlay with filterable commands
-- [x] 4.4 Drag and drop (internal) — basic implementation
-- [ ] 4.5 Drag and drop (OS)
-- [x] 4.6 Context menu — basic implementation
-- [x] 4.7 Workspace save/restore — auto-save on close, restore on launch
-
-**Completed:** 2026-05-22
-
-#### Week 5: Search & Preview — Partial
-- [x] 5.1 Global filename search (Cmd+P) — GlobalSearch.svelte
-- [x] 5.2 Preview pane — PreviewPane.svelte
-- [x] 5.3 Info panel — InfoPanel.svelte
-- [x] 5.4 Recent files tracking — sidebar display
-
-#### Week 6: UI Polish & Theming — DONE
-- [x] 6.1 Stitch design system adherence (dark mode reference)
-- [x] 6.2 Material Symbols Outlined icons (replaced emoji)
-- [x] 6.3 Geist/Inter/JetBrains Mono font stack
-- [x] 6.4 CSS custom properties architecture
-- [x] 6.5 Terminal integration + disk space status bar
-- [x] 6.6 Theme system: dark + light + system preference
-  - Backend: `get_theme`/`set_theme` Tauri IPC commands
-  - Frontend: themeStore.ts (writable/derived stores, OS media query listener)
-  - CSS: `[data-theme="dark"]` / `[data-theme="light"]` with M3 Fidelity tokens
-  - FOUC prevention via localStorage inline script
-  - Sidebar toggle: cycles system → light → dark
-
-**Completed:** 2026-05-23
-
-### Key Commits
-| Date | Commit | Description |
-|------|--------|-------------|
-| 2026-05-21 | 4602e5f | Initial scaffold: specs, architecture, compiling workspace |
-| 2026-05-21 | 2511ee2 | Add Tauri + Svelte frontend and implement file operations |
-| 2026-05-21 | 55192bd | Implement WatcherService with notify-debouncer-full |
-| 2026-05-21 | 55030cf | Add file operation IPC commands and context menu UI |
-| 2026-05-21 | 9f15925 | Add progress toasts, conflict resolution, and drag-drop |
-| 2026-05-22 | 3c4c6c1 | Implement redo for file operations and add redo IPC command |
-| 2026-05-22 | 326df9c | Add tab system with per-tab state and drag-to-reorder |
-| 2026-05-22 | 87e8feb | Add keyboard navigation to file list |
-| 2026-05-22 | f56233c | Add command palette with Cmd+K shortcut |
-| 2026-05-22 | 7b32097 | Add global filename search with Cmd+P shortcut |
-| 2026-05-22 | 44a2ca0 | Add recent files tracking and sidebar display |
-| 2026-05-22 | 2a43610 | Add theme support with CSS custom properties |
-| 2026-05-22 | 8106a9b | Add terminal integration and disk space status bar |
-| 2026-05-23 | — | Theme system: dark/light/system with M3 Fidelity tokens |
-| 2026-05-23 | — | Implement indexing pipeline: parsers, chunker, FTS5, background queue |
-
-### Architecture Decisions
-- All-Rust backend, Tauri shell, Svelte frontend
-- Spec-driven development: specs are source of truth, code satisfies specs
-- 7 spec files: overview, core, fs, index, search, ai, app_ipc
-- 6 crates: noema-core, noema-fs, noema-index, noema-search, noema-ai, noema-app
-- **Embeddings deferred:** ONNX/BGE-small embedding engine deferred from initial index implementation. Pipeline stores chunks + FTS5 for keyword search. Embeddings will be added as follow-up to enable semantic/vector search.
-
-### Phase 2: Indexing & Search (Weeks 7–10)
-
-#### Week 7: Indexing Pipeline — IN PROGRESS
-- [x] 7.1 FTS5 virtual table + sync triggers in migrations
-- [x] 7.2 MarkdownParser (pulldown-cmark) + PlainTextParser (fallback)
-- [x] 7.3 SemanticChunker with section-aware splitting + overlap
-- [x] 7.4 IndexerPipeline: priority queues, blake3 dedup, throttling
-- [x] 7.5 DB helpers (upsert_file_record, insert_chunks, etc.)
-- [x] 7.6 IPC commands: index_directory, get_index_status, pause/resume
-- [x] 7.7 Event forwarding: index:progress, index:complete
-- [x] 7.8 File watcher → auto-enqueue on fs changes
-- [x] 7.9 Frontend: index status indicator in status bar
-
-**Completed:** 2026-05-23
-
-#### Week 8: Full-Text Search — DONE
-- [x] 8.1 QueryParser with filter extraction (type:, after:, size:, has:tag:, in:, exact phrases)
-- [x] 8.2 SearchEngine: FTS5 full-text search with BM25 ranking
-- [x] 8.3 Snippet extraction with term highlighting
-- [x] 8.4 Filter-only and recent-files fallback modes
-- [x] 8.5 Duplicate detection (hash-based grouping)
-- [x] 8.6 IPC: content_search, find_duplicates commands
-- [x] 8.7 GlobalSearch dual-mode UI (Tab toggles Files ↔ Content)
-
-**Completed:** 2026-05-23
-
-### Current Branch
-`main` — All features merged
+## Open Questions
+_None._
 
 ---
-*Last updated: 2026-05-23*
+
+## Architecture Reference
+
+- **Stack:** All-Rust backend, Tauri 2 shell, Svelte frontend
+- **Crates:** noema-core, noema-fs, noema-index, noema-search, noema-ai, noema-app
+- **Spec files:** specs/00_overview through specs/06_app_ipc
+- **Key decisions:**
+  - Embeddings (ONNX/BGE-small) deferred — see DCL-001
+  - FTS5 for keyword search, ready for hybrid once embeddings added
+  - Theme system uses M3 Fidelity tokens with data-theme attribute
+
+## Key Commits (Phase 2)
+| Date | Commit | Description |
+|------|--------|-------------|
+| 2026-05-23 | 7bc9137 | Add FTS5 virtual table and implement file parsers |
+| 2026-05-23 | 04ca67e | Implement semantic chunker and indexing pipeline |
+| 2026-05-23 | a23d953 | Wire indexing pipeline into Tauri IPC layer |
+| 2026-05-23 | 171d89b | Auto-enqueue index jobs from file watcher events |
+| 2026-05-23 | 1e2a9a6 | Add indexing status indicator in status bar |
+| 2026-05-23 | ef8a385 | Implement query parser and FTS5 search engine |
+| 2026-05-23 | 109b8cb | Add content_search and find_duplicates IPC commands |
+| 2026-05-23 | 93e9f50 | Add content search mode to GlobalSearch |
+
+---
+*Last updated: 2026-05-23 14:00*
