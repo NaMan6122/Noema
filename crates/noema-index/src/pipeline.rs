@@ -12,6 +12,7 @@ use noema_core::events::{AppEvent, EventBus};
 
 use crate::chunker::SemanticChunker;
 use crate::db as index_db;
+use crate::embeddings::EmbeddingEngine;
 use crate::parser::ParserRegistry;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -59,6 +60,7 @@ pub struct IndexerPipeline {
     low_queue: Arc<SegQueue<IndexJob>>,
     parser_registry: Arc<ParserRegistry>,
     chunker: SemanticChunker,
+    embedder: Option<Arc<tokio::sync::Mutex<EmbeddingEngine>>>,
     db: Arc<Database>,
     event_bus: Arc<EventBus>,
     paused: Arc<AtomicBool>,
@@ -85,6 +87,7 @@ impl IndexerPipeline {
             low_queue: Arc::new(SegQueue::new()),
             parser_registry,
             chunker: SemanticChunker::default_config(),
+            embedder: None,
             db,
             event_bus,
             paused: Arc::new(AtomicBool::new(false)),
@@ -97,6 +100,11 @@ impl IndexerPipeline {
             last_user_input: Arc::new(AtomicU64::new(0)),
             max_file_size: max_file_size_mb * 1024 * 1024,
         }
+    }
+
+    pub fn with_embedder(mut self, embedder: Arc<tokio::sync::Mutex<EmbeddingEngine>>) -> Self {
+        self.embedder = Some(embedder);
+        self
     }
 
     pub fn enqueue(&self, job: IndexJob) {
@@ -264,7 +272,33 @@ impl IndexerPipeline {
             error!(error = %e, "Failed to delete old chunks");
         }
 
-        if let Err(e) = index_db::insert_chunks(&self.db, file_id, &chunks) {
+        // Embed chunks if embedder is available
+        let embeddings = if let Some(ref embedder) = self.embedder {
+            let texts: Vec<&str> = chunks.iter().map(|c| c.content.as_str()).collect();
+            let batch_size = 32;
+            let mut all_embeddings = Vec::with_capacity(chunks.len());
+            let emb = embedder.lock().await;
+            for batch in texts.chunks(batch_size) {
+                match emb.embed_batch(batch) {
+                    Ok(embs) => all_embeddings.extend(embs),
+                    Err(e) => {
+                        warn!(error = %e, "Embedding failed, storing without vectors");
+                        all_embeddings.clear();
+                        break;
+                    }
+                }
+            }
+            if all_embeddings.len() == chunks.len() { Some(all_embeddings) } else { None }
+        } else {
+            None
+        };
+
+        let store_result = match &embeddings {
+            Some(embs) => index_db::insert_chunks_with_embeddings(&self.db, file_id, &chunks, Some(embs)),
+            None => index_db::insert_chunks(&self.db, file_id, &chunks),
+        };
+
+        if let Err(e) = store_result {
             error!(path = %path.display(), error = %e, "Failed to insert chunks");
             self.pending_count.fetch_sub(1, Ordering::Relaxed);
             return;

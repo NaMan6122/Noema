@@ -104,13 +104,22 @@ pub fn delete_chunks_for_file(db: &Database, file_id: i64) -> Result<()> {
 }
 
 pub fn insert_chunks(db: &Database, file_id: i64, chunks: &[Chunk]) -> Result<()> {
+    insert_chunks_with_embeddings(db, file_id, chunks, None)
+}
+
+pub fn insert_chunks_with_embeddings(
+    db: &Database,
+    file_id: i64,
+    chunks: &[Chunk],
+    embeddings: Option<&[Vec<f32>]>,
+) -> Result<()> {
     let conn = db.connection()?;
     let mut stmt = conn.prepare(
-        "INSERT INTO chunks (file_id, chunk_index, content, token_count, heading, chunk_type)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6)"
+        "INSERT INTO chunks (file_id, chunk_index, content, token_count, heading, chunk_type, embedding)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)"
     )?;
 
-    for chunk in chunks {
+    for (i, chunk) in chunks.iter().enumerate() {
         let chunk_type_str = match &chunk.chunk_type {
             crate::parser::SectionType::Paragraph => "text",
             crate::parser::SectionType::Heading => "heading",
@@ -119,6 +128,10 @@ pub fn insert_chunks(db: &Database, file_id: i64, chunks: &[Chunk]) -> Result<()
             crate::parser::SectionType::List => "list",
         };
 
+        let embedding_blob: Option<Vec<u8>> = embeddings
+            .and_then(|embs| embs.get(i))
+            .map(|emb| crate::embeddings::embedding_to_bytes(emb));
+
         stmt.execute(params![
             file_id,
             chunk.index as i64,
@@ -126,6 +139,7 @@ pub fn insert_chunks(db: &Database, file_id: i64, chunks: &[Chunk]) -> Result<()
             chunk.token_count as i64,
             chunk.heading_context,
             chunk_type_str,
+            embedding_blob,
         ])?;
     }
 
