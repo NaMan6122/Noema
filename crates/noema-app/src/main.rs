@@ -10,6 +10,7 @@ use noema_core::types::{FileEntry, SortDirection, SortField, SortOrder};
 use noema_fs::highlight::Highlighter;
 use noema_fs::ops::FileOpsEngine;
 use noema_fs::thumbs::ThumbnailService;
+use noema_ai::{ContextStore, LlmEngine, StubBackend, UserContextEdit};
 use noema_index::embeddings::EmbeddingEngine;
 use noema_index::parser::ParserRegistry;
 use noema_index::pipeline::{IndexJob, IndexReason, IndexState, IndexerPipeline, Priority};
@@ -26,6 +27,8 @@ struct AppState {
     db: Arc<Database>,
     indexer: Arc<IndexerPipeline>,
     search_engine: Arc<SearchEngine>,
+    ai_engine: Arc<LlmEngine>,
+    context_store: Arc<ContextStore>,
 }
 
 #[derive(Serialize)]
@@ -651,6 +654,68 @@ async fn find_duplicates(state: State<'_, AppState>) -> Result<serde_json::Value
     Ok(serde_json::json!(groups))
 }
 
+#[tauri::command]
+async fn generate_file_context(path: String, state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+    let content = tokio::fs::read_to_string(&path).await.map_err(|e| e.to_string())?;
+    let ctx = state.ai_engine.generate_context(&content, 512).await.map_err(|e| e.to_string())?;
+
+    let conn = state.db.connection().map_err(|e| e.to_string())?;
+    let file_id: Option<i64> = conn.query_row(
+        "SELECT id FROM files WHERE path = ?1", rusqlite::params![path], |r| r.get(0),
+    ).ok();
+
+    if let Some(fid) = file_id {
+        state.context_store.save_context(fid, &ctx, "stub-v1").map_err(|e| e.to_string())?;
+    }
+
+    Ok(serde_json::json!(ctx))
+}
+
+#[tauri::command]
+async fn get_file_context(path: String, state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+    let conn = state.db.connection().map_err(|e| e.to_string())?;
+    let file_id: i64 = conn.query_row(
+        "SELECT id FROM files WHERE path = ?1", rusqlite::params![path], |r| r.get(0),
+    ).map_err(|e| e.to_string())?;
+
+    let ctx = state.context_store.get_context(file_id).map_err(|e| e.to_string())?;
+    Ok(serde_json::json!(ctx))
+}
+
+#[tauri::command]
+async fn suggest_tags(path: String, state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+    let content = tokio::fs::read_to_string(&path).await.map_err(|e| e.to_string())?;
+    let tags = state.ai_engine.suggest_tags(&content, &[]).await.map_err(|e| e.to_string())?;
+    Ok(serde_json::json!(tags))
+}
+
+#[tauri::command]
+async fn suggest_filename(path: String, state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+    let content = tokio::fs::read_to_string(&path).await.map_err(|e| e.to_string())?;
+    let name = state.ai_engine.suggest_filename(&content).await.map_err(|e| e.to_string())?;
+    Ok(serde_json::json!(name))
+}
+
+#[tauri::command]
+async fn apply_ai_tags(path: String, tags: Vec<String>, state: State<'_, AppState>) -> Result<(), String> {
+    let conn = state.db.connection().map_err(|e| e.to_string())?;
+    let file_id: i64 = conn.query_row(
+        "SELECT id FROM files WHERE path = ?1", rusqlite::params![path], |r| r.get(0),
+    ).map_err(|e| e.to_string())?;
+
+    state.context_store.apply_suggested_tags(file_id, &tags).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn edit_context(path: String, edit: UserContextEdit, state: State<'_, AppState>) -> Result<(), String> {
+    let conn = state.db.connection().map_err(|e| e.to_string())?;
+    let file_id: i64 = conn.query_row(
+        "SELECT id FROM files WHERE path = ?1", rusqlite::params![path], |r| r.get(0),
+    ).map_err(|e| e.to_string())?;
+
+    state.context_store.update_user_edit(file_id, &edit).map_err(|e| e.to_string())
+}
+
 fn main() {
     tracing_subscriber::fmt::init();
 
@@ -739,6 +804,9 @@ fn main() {
         }
     });
 
+    let ai_engine = Arc::new(LlmEngine::new(120).with_backend(Arc::new(StubBackend)));
+    let context_store = Arc::new(ContextStore::new(db.clone()));
+
     let app_state = AppState {
         fs_engine,
         thumb_service,
@@ -747,6 +815,8 @@ fn main() {
         db,
         indexer,
         search_engine,
+        ai_engine,
+        context_store,
     };
 
     tauri::Builder::default()
@@ -829,6 +899,12 @@ fn main() {
             resume_indexing,
             content_search,
             find_duplicates,
+            generate_file_context,
+            get_file_context,
+            suggest_tags,
+            suggest_filename,
+            apply_ai_tags,
+            edit_context,
         ])
         .run(tauri::generate_context!())
         .expect("error running Noema");

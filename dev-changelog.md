@@ -29,3 +29,35 @@ Embedding engine omitted from initial implementation. Pipeline stores parsed chu
 - When embeddings are added: pipeline gains an embed step between chunk and store; search gains vector KNN + RRF fusion
 
 **Spec Updated:** NO — spec remains as the target; implementation will converge once embeddings are added in a future task.
+
+---
+
+## [2026-05-23 14:30] — DCL-001 RESOLVED
+
+**Resolution:** T-010 implemented the full embedding engine (ONNX/BGE-small) and hybrid search (RRF fusion). DCL-001 deviation is no longer active.
+
+---
+
+## [2026-05-23 16:00] — DCL-002
+
+**Task Reference:** T-011
+**Spec Affected:** specs/05_ai.spec.md
+**Type:** REDUCTIVE
+
+**Original Spec:**
+AI layer uses `llama-cpp-rs` for local LLM inference (context generation, entity extraction, tag suggestion, smart rename). Model loaded lazily, unloaded after 2min inactivity.
+
+**Deviation:**
+Local LLM inference deferred. Implemented a trait-based `InferenceBackend` with a `StubBackend` that returns placeholder data. ContextStore (versioning, tag management, user edits) fully implemented.
+
+**Reason:**
+- llama-cpp-rs requires C++ compilation toolchain and multi-GB model downloads
+- The ContextStore and IPC layer are independently useful and can be tested/wired to UI now
+- Real inference backend (local or API-based) can be added by implementing the trait
+
+**Impact:**
+- AI features return placeholder data until a real backend is configured
+- All IPC commands and DB operations are fully functional
+- UI can be built against the stable interface now
+
+**Spec Updated:** NO — spec remains as the target.

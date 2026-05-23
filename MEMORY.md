@@ -1,10 +1,10 @@
 # Agent Memory
 
 ## Active Task
-T-010 — Add embedding engine and hybrid search (RRF fusion)
+T-011 — Implement AI layer (ContextStore + LlmEngine stub)
 State: DONE
-Started: 2026-05-23 14:30
-Last Updated: 2026-05-23 15:30
+Started: 2026-05-23 16:00
+Last Updated: 2026-05-23 16:30
 
 ## Task Log
 
@@ -29,6 +29,18 @@ Last Updated: 2026-05-23 15:30
   - [x] Graceful degradation: FTS-only when model not present
   - [x] App wiring: load model from data_dir/models/bge-small
 **Outcome:** Complete. Workspace builds clean, 13 tests pass. Embedding engine loaded on startup if model files present; otherwise FTS-only mode. Hybrid search uses RRF to merge vector + keyword results.
+**Blockers:** NONE
+
+### [2026-05-23 16:00] — T-011: Implement AI layer (ContextStore + LlmEngine stub)
+**Goal:** Implement spec 05 AI layer with pluggable InferenceBackend trait, ContextStore (versioning, tag management), and IPC commands
+**Approach:** Trait-based backend with StubBackend for dev; full ContextStore with versioning (max 10), user edits, AI tag application
+**Checklist:**
+  - [x] Types: GeneratedContext, Entity, EntityType, FileContext, InferenceBackend trait
+  - [x] ContextStore: save/get/versions/user_edit/apply_tags/prune
+  - [x] LlmEngine: sequential inference lock, StubBackend
+  - [x] IPC: generate_file_context, get_file_context, suggest_tags, suggest_filename, apply_ai_tags, edit_context
+  - [x] Tests: 7 passing (4 context store + 3 llm engine)
+**Outcome:** Complete. 25 total tests pass. AI layer wired with stub backend; ready for real inference backend.
 **Blockers:** NONE
 
 ### [2026-05-23 12:00] — T-008: Implement full-text search (Week 8)
