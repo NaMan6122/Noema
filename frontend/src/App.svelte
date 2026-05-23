@@ -54,6 +54,7 @@
   let searchQuery = '';
   let globalSearchVisible = false;
   let diskInfo: { total: number; available: number; used: number } | null = null;
+  let indexStatus: { state: string; indexedFiles: number; totalFiles: number; currentFile: string | null } | null = null;
 
   function formatSize(bytes: number): string {
     if (bytes >= 1e12) return (bytes / 1e12).toFixed(1) + ' TB';
@@ -159,6 +160,12 @@
     }
 
     listen('fs:changed', () => { loadDirectory(currentPath); });
+    listen('index:progress', (event: any) => {
+      indexStatus = { state: 'Running', ...event.payload };
+    });
+    listen('index:complete', () => {
+      indexStatus = null;
+    });
     window.addEventListener('beforeunload', saveWorkspace);
     return () => window.removeEventListener('beforeunload', saveWorkspace);
   });
@@ -547,6 +554,12 @@
 
     <footer class="status-bar">
       <span>{selectedPaths.size > 0 ? `${selectedPaths.size} selected` : `${entries.length} items`}</span>
+      {#if indexStatus}
+        <span class="status-index">
+          <span class="material-symbols-outlined" style="font-size: 14px; animation: spin 1s linear infinite;">sync</span>
+          Indexing {indexStatus.indexedFiles}/{indexStatus.totalFiles}
+        </span>
+      {/if}
       <span class="status-disk">{diskInfo ? `${formatSize(diskInfo.available)} free of ${formatSize(diskInfo.total)}` : ''}</span>
       <span class="status-path">{currentPath}</span>
     </footer>
@@ -918,6 +931,19 @@
 
   .status-path {
     opacity: 0.7;
+  }
+
+  .status-index {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--text-primary);
+    opacity: 0.9;
+  }
+
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
   }
 
   /* Intelligence strip */
