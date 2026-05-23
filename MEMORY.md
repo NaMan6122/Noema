@@ -106,10 +106,10 @@
 - [x] 7.5 DB helpers (upsert_file_record, insert_chunks, etc.)
 - [x] 7.6 IPC commands: index_directory, get_index_status, pause/resume
 - [x] 7.7 Event forwarding: index:progress, index:complete
-- [ ] 7.8 File watcher → auto-enqueue on fs changes
-- [ ] 7.9 Frontend: index status indicator in status bar
+- [x] 7.8 File watcher → auto-enqueue on fs changes
+- [x] 7.9 Frontend: index status indicator in status bar
 
-**Started:** 2026-05-23
+**Completed:** 2026-05-23
 
 ### Current Branch
 `main` — All features merged
