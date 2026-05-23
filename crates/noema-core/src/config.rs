@@ -108,6 +108,9 @@ pub struct AiConfig {
     pub llm_model_path: Option<PathBuf>,
     pub llm_threads: usize,
     pub auto_generate_context: bool,
+    pub api_base_url: Option<String>,
+    pub api_key: Option<String>,
+    pub api_model: Option<String>,
 }
 
 impl Default for AiConfig {
@@ -118,6 +121,9 @@ impl Default for AiConfig {
             llm_model_path: None,
             llm_threads: 4,
             auto_generate_context: false,
+            api_base_url: None,
+            api_key: None,
+            api_model: None,
         }
     }
 }

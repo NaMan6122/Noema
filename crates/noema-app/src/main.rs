@@ -10,7 +10,7 @@ use noema_core::types::{FileEntry, SortDirection, SortField, SortOrder};
 use noema_fs::highlight::Highlighter;
 use noema_fs::ops::FileOpsEngine;
 use noema_fs::thumbs::ThumbnailService;
-use noema_ai::{ContextStore, LlmEngine, StubBackend, UserContextEdit};
+use noema_ai::{ContextStore, LlmEngine, OpenAiBackend, StubBackend, UserContextEdit};
 use noema_index::embeddings::EmbeddingEngine;
 use noema_index::parser::ParserRegistry;
 use noema_index::pipeline::{IndexJob, IndexReason, IndexState, IndexerPipeline, Priority};
@@ -804,7 +804,21 @@ fn main() {
         }
     });
 
-    let ai_engine = Arc::new(LlmEngine::new(120).with_backend(Arc::new(StubBackend)));
+    let ai_engine = {
+        let config = AppConfig::load_or_default();
+        let engine = LlmEngine::new(120);
+        if let (Some(base_url), Some(api_key), Some(model)) = (
+            config.ai.api_base_url.as_deref(),
+            config.ai.api_key.as_deref(),
+            config.ai.api_model.as_deref(),
+        ) {
+            tracing::info!("AI backend: OpenAI-compatible at {}", base_url);
+            Arc::new(engine.with_backend(Arc::new(OpenAiBackend::new(base_url, api_key, model))))
+        } else {
+            tracing::info!("AI backend: stub (no API configured)");
+            Arc::new(engine.with_backend(Arc::new(StubBackend)))
+        }
+    };
     let context_store = Arc::new(ContextStore::new(db.clone()));
 
     let app_state = AppState {
