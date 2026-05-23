@@ -480,6 +480,30 @@ async fn load_workspace(
 }
 
 #[tauri::command]
+async fn get_theme() -> Result<String, String> {
+    let config = AppConfig::load_or_default();
+    let theme_str = match config.general.theme {
+        noema_core::config::Theme::System => "system",
+        noema_core::config::Theme::Light => "light",
+        noema_core::config::Theme::Dark => "dark",
+    };
+    Ok(theme_str.to_string())
+}
+
+#[tauri::command]
+async fn set_theme(theme: String) -> Result<(), String> {
+    let mut config = AppConfig::load_or_default();
+    config.general.theme = match theme.as_str() {
+        "light" => noema_core::config::Theme::Light,
+        "dark" => noema_core::config::Theme::Dark,
+        _ => noema_core::config::Theme::System,
+    };
+    let path = AppConfig::config_dir().join("config.toml");
+    std::fs::create_dir_all(AppConfig::config_dir()).map_err(|e| e.to_string())?;
+    config.save(&path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn get_favorites() -> Result<Vec<FavoriteEntry>, String> {
     let mut favorites = Vec::new();
 
@@ -631,6 +655,8 @@ fn main() {
             get_recent_files,
             open_in_terminal,
             get_disk_space,
+            get_theme,
+            set_theme,
         ])
         .run(tauri::generate_context!())
         .expect("error running Noema");

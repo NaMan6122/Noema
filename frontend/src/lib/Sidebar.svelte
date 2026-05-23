@@ -1,6 +1,8 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
   import { onMount } from 'svelte';
+  import { themeChoice, setTheme } from './themeStore';
+  import type { ThemeChoice } from './themeStore';
 
   interface FavoriteEntry {
     name: string;
@@ -16,13 +18,13 @@
   let recents: FavoriteEntry[] = [];
 
   const favoriteIcons: Record<string, string> = {
-    Home: '🏠',
-    Desktop: '🖥️',
-    Documents: '📄',
-    Downloads: '📥',
-    Pictures: '🖼️',
-    Music: '🎵',
-    Videos: '🎬',
+    Home: 'home',
+    Desktop: 'desktop_windows',
+    Documents: 'description',
+    Downloads: 'download',
+    Pictures: 'image',
+    Music: 'music_note',
+    Videos: 'movie',
   };
 
   onMount(async () => {
@@ -43,117 +45,200 @@
   }
 </script>
 
-<nav class="sidebar">
-  <section>
-    <h3>Favorites</h3>
-    {#each favorites as fav}
-      <button
-        class="sidebar-item"
-        class:active={isActive(fav.path)}
-        on:click={() => onNavigate(fav.path)}
-        title={fav.path}
-      >
-        <span class="sidebar-icon">{favoriteIcons[fav.name] || '📁'}</span>
-        <span class="sidebar-label">{fav.name}</span>
+<aside class="sidebar">
+  <div class="brand">
+    <div class="brand-logo">
+      <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1; color: var(--accent-on-primary); font-size: 20px;">dataset</span>
+    </div>
+    <div class="brand-text">
+      <h1 class="brand-name">Noema</h1>
+      <p class="brand-sub">Semantic Intelligence</p>
+    </div>
+  </div>
+
+  <nav class="nav-sections">
+    <section>
+      <h3 class="section-label">Navigation</h3>
+      {#each favorites as fav}
+        <button
+          class="nav-item"
+          class:active={isActive(fav.path)}
+          on:click={() => onNavigate(fav.path)}
+          title={fav.path}
+        >
+          <span class="material-symbols-outlined">{favoriteIcons[fav.name] || 'folder'}</span>
+          <span class="nav-label">{fav.name}</span>
+        </button>
+      {/each}
+    </section>
+
+    {#if volumes.length > 0}
+      <section>
+        <h3 class="section-label">Volumes</h3>
+        {#each volumes as vol}
+          <button
+            class="nav-item"
+            class:active={isActive(vol.path)}
+            on:click={() => onNavigate(vol.path)}
+            title={vol.path}
+          >
+            <span class="material-symbols-outlined">hard_drive</span>
+            <span class="nav-label">{vol.name}</span>
+          </button>
+        {/each}
+      </section>
+    {/if}
+
+    {#if recents.length > 0}
+      <section>
+        <h3 class="section-label">Recents</h3>
+        {#each recents as rec}
+          <button
+            class="nav-item"
+            class:active={isActive(rec.path)}
+            on:click={() => onNavigate(rec.path)}
+            title={rec.path}
+          >
+            <span class="material-symbols-outlined">schedule</span>
+            <span class="nav-label">{rec.name}</span>
+          </button>
+        {/each}
+      </section>
+    {/if}
+
+    <section class="system-section">
+      <h3 class="section-label">System</h3>
+      <button class="nav-item" on:click={() => {
+        const order: ThemeChoice[] = ['system', 'light', 'dark'];
+        const next = order[(order.indexOf($themeChoice) + 1) % 3];
+        setTheme(next);
+      }}>
+        <span class="material-symbols-outlined">
+          {$themeChoice === 'light' ? 'light_mode' : $themeChoice === 'dark' ? 'dark_mode' : 'brightness_auto'}
+        </span>
+        <span class="nav-label">{$themeChoice === 'system' ? 'System Theme' : $themeChoice === 'light' ? 'Light Mode' : 'Dark Mode'}</span>
       </button>
-    {/each}
-  </section>
-
-  {#if volumes.length > 0}
-    <section>
-      <h3>Volumes</h3>
-      {#each volumes as vol}
-        <button
-          class="sidebar-item"
-          class:active={isActive(vol.path)}
-          on:click={() => onNavigate(vol.path)}
-          title={vol.path}
-        >
-          <span class="sidebar-icon">💾</span>
-          <span class="sidebar-label">{vol.name}</span>
-        </button>
-      {/each}
+      <button class="nav-item">
+        <span class="material-symbols-outlined">settings</span>
+        <span class="nav-label">Settings</span>
+      </button>
     </section>
-  {/if}
-
-  {#if recents.length > 0}
-    <section>
-      <h3>Recents</h3>
-      {#each recents as rec}
-        <button
-          class="sidebar-item"
-          class:active={isActive(rec.path)}
-          on:click={() => onNavigate(rec.path)}
-          title={rec.path}
-        >
-          <span class="sidebar-icon">🕐</span>
-          <span class="sidebar-label">{rec.name}</span>
-        </button>
-      {/each}
-    </section>
-  {/if}
-</nav>
+  </nav>
+</aside>
 
 <style>
   .sidebar {
-    width: 200px;
-    min-width: 200px;
-    background: var(--bg-mantle);
-    border-right: 1px solid var(--bg-surface0);
+    width: 240px;
+    min-width: 240px;
+    background: var(--bg-container-low);
+    border-right: 1px solid var(--text-outline);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* Brand */
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px;
+  }
+
+  .brand-logo {
+    width: 32px;
+    height: 32px;
+    border-radius: 4px;
+    background: var(--accent-primary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .brand-name {
+    font-family: var(--font-display);
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0;
+    line-height: 1.2;
+    letter-spacing: -0.01em;
+  }
+
+  .brand-sub {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-secondary);
+    margin: 0;
+    font-weight: 500;
+  }
+
+  /* Navigation */
+  .nav-sections {
+    flex: 1;
     overflow-y: auto;
-    padding: 8px 0;
+    padding: 0 8px;
     display: flex;
     flex-direction: column;
     gap: 4px;
   }
 
   section {
-    padding: 0 8px;
+    margin-bottom: 4px;
   }
 
-  h3 {
+  .section-label {
     font-size: 10px;
+    font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
-    color: var(--text-muted);
-    margin: 8px 4px 4px;
-    font-weight: 600;
+    letter-spacing: 0.08em;
+    color: var(--text-outline-full, var(--text-muted));
+    margin: 20px 12px 8px;
+    padding: 0;
   }
 
-  .sidebar-item {
+  .nav-item {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 12px;
     width: 100%;
-    padding: 5px 8px;
+    padding: 8px 16px;
     border: none;
-    border-radius: 4px;
+    border-left: 2px solid transparent;
+    border-radius: 0;
     background: none;
-    color: var(--text-primary);
-    font-size: 13px;
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 500;
     cursor: pointer;
     text-align: left;
+    transition: all 0.15s;
   }
 
-  .sidebar-item:hover {
-    background: var(--bg-surface0);
+  .nav-item:hover {
+    background: var(--bg-container-high);
+    color: var(--text-primary);
   }
 
-  .sidebar-item.active {
-    background: var(--bg-surface1);
-    color: var(--accent-blue);
+  .nav-item.active {
+    background: var(--accent-secondary-container);
+    color: var(--accent-on-secondary-container);
+    border-left-color: var(--accent-primary);
   }
 
-  .sidebar-icon {
-    font-size: 14px;
-    width: 20px;
-    text-align: center;
-    flex-shrink: 0;
+  .nav-item .material-symbols-outlined {
+    font-size: 20px;
   }
 
-  .sidebar-label {
+  .nav-label {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .system-section {
+    margin-top: auto;
   }
 </style>
