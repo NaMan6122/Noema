@@ -16,6 +16,7 @@ use noema_index::parser::ParserRegistry;
 use noema_index::pipeline::{IndexJob, IndexReason, IndexState, IndexerPipeline, Priority};
 use noema_search::engine::SearchEngine;
 use noema_search::query::QueryParser;
+use noema_search::smart_folders::{SmartFolderQuery, SmartFolderStore};
 use serde::Serialize;
 use tauri::{Emitter, State};
 
@@ -27,6 +28,7 @@ struct AppState {
     db: Arc<Database>,
     indexer: Arc<IndexerPipeline>,
     search_engine: Arc<SearchEngine>,
+    smart_folder_store: Arc<SmartFolderStore>,
     ai_engine: Arc<LlmEngine>,
     context_store: Arc<ContextStore>,
 }
@@ -716,6 +718,39 @@ async fn edit_context(path: String, edit: UserContextEdit, state: State<'_, AppS
     state.context_store.update_user_edit(file_id, &edit).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+async fn create_smart_folder(name: String, query: SmartFolderQuery, icon: Option<String>, state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+    let folder = state.smart_folder_store.create(&name, &query, icon.as_deref()).map_err(|e| e.to_string())?;
+    Ok(serde_json::json!(folder))
+}
+
+#[tauri::command]
+async fn list_smart_folders(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+    let folders = state.smart_folder_store.list().map_err(|e| e.to_string())?;
+    Ok(serde_json::json!(folders))
+}
+
+#[tauri::command]
+async fn delete_smart_folder(id: i64, state: State<'_, AppState>) -> Result<(), String> {
+    state.smart_folder_store.delete(id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn update_smart_folder(id: i64, name: Option<String>, query: Option<SmartFolderQuery>, icon: Option<String>, state: State<'_, AppState>) -> Result<(), String> {
+    state.smart_folder_store.update(id, name.as_deref(), query.as_ref(), icon.as_deref()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn run_smart_folder(id: i64, state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+    let folder = state.smart_folder_store.get(id).map_err(|e| e.to_string())?
+        .ok_or("Smart folder not found")?;
+    let search_text = folder.query.to_search_query();
+    let parser = QueryParser;
+    let parsed = parser.parse(&search_text);
+    let results = state.search_engine.search(&parsed, 100, 0).await.map_err(|e| e.to_string())?;
+    Ok(serde_json::json!(results))
+}
+
 fn main() {
     tracing_subscriber::fmt::init();
 
@@ -804,6 +839,8 @@ fn main() {
         }
     });
 
+    let smart_folder_store = Arc::new(SmartFolderStore::new(db.clone()));
+
     let ai_engine = {
         let config = AppConfig::load_or_default();
         let engine = LlmEngine::new(120);
@@ -829,6 +866,7 @@ fn main() {
         db,
         indexer,
         search_engine,
+        smart_folder_store,
         ai_engine,
         context_store,
     };
@@ -919,6 +957,11 @@ fn main() {
             suggest_filename,
             apply_ai_tags,
             edit_context,
+            create_smart_folder,
+            list_smart_folders,
+            delete_smart_folder,
+            update_smart_folder,
+            run_smart_folder,
         ])
         .run(tauri::generate_context!())
         .expect("error running Noema");
