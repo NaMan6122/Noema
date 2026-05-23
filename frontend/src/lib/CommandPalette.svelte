@@ -20,49 +20,32 @@
     ? commands.filter(c => c.label.toLowerCase().includes(query.toLowerCase()))
     : commands;
 
-  $: if (visible) {
-    query = '';
-    selectedIndex = 0;
-    tick().then(() => inputEl?.focus());
-  }
-
+  $: if (visible) { query = ''; selectedIndex = 0; tick().then(() => inputEl?.focus()); }
   $: selectedIndex = Math.min(selectedIndex, Math.max(0, filtered.length - 1));
 
   function handleKeydown(e: KeyboardEvent) {
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      onClose();
-    } else if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      selectedIndex = Math.min(filtered.length - 1, selectedIndex + 1);
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      selectedIndex = Math.max(0, selectedIndex - 1);
-    } else if (e.key === 'Enter') {
-      e.preventDefault();
-      if (filtered[selectedIndex]) {
-        filtered[selectedIndex].action();
-        onClose();
-      }
-    }
+    if (e.key === 'Escape') { e.preventDefault(); onClose(); }
+    else if (e.key === 'ArrowDown') { e.preventDefault(); selectedIndex = Math.min(filtered.length - 1, selectedIndex + 1); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); selectedIndex = Math.max(0, selectedIndex - 1); }
+    else if (e.key === 'Enter') { e.preventDefault(); if (filtered[selectedIndex]) { filtered[selectedIndex].action(); onClose(); } }
   }
 
-  function execute(cmd: Command) {
-    cmd.action();
-    onClose();
-  }
+  function execute(cmd: Command) { cmd.action(); onClose(); }
 </script>
 
 {#if visible}
-  <div class="palette-overlay" on:click|self={onClose}>
+  <div class="overlay" on:click|self={onClose}>
     <div class="palette" on:keydown={handleKeydown}>
-      <input
-        class="palette-input"
-        type="text"
-        bind:value={query}
-        bind:this={inputEl}
-        placeholder="Type a command..."
-      />
+      <div class="palette-header">
+        <span class="material-symbols-outlined" style="color: var(--accent-primary);">terminal</span>
+        <input
+          class="palette-input"
+          type="text"
+          bind:value={query}
+          bind:this={inputEl}
+          placeholder="Type a command..."
+        />
+      </div>
       <div class="palette-list">
         {#each filtered as cmd, i (cmd.id)}
           <button
@@ -86,10 +69,11 @@
 {/if}
 
 <style>
-  .palette-overlay {
+  .overlay {
     position: fixed;
     inset: 0;
     background: var(--overlay);
+    backdrop-filter: blur(8px);
     display: flex;
     justify-content: center;
     padding-top: 20vh;
@@ -97,26 +81,35 @@
   }
 
   .palette {
-    width: 500px;
-    max-height: 400px;
-    background: var(--bg-base);
-    border: 1px solid var(--bg-surface1);
-    border-radius: 10px;
+    width: 560px;
+    max-height: 420px;
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px);
+    border: 1px solid var(--text-outline);
+    border-radius: 12px;
     overflow: hidden;
-    box-shadow: 0 8px 32px var(--shadow);
+    box-shadow: 0 8px 32px var(--shadow), inset 0 0 15px rgba(208, 188, 255, 0.05);
     display: flex;
     flex-direction: column;
     align-self: flex-start;
   }
 
-  .palette-input {
+  .palette-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
     padding: 14px 18px;
+    border-bottom: 1px solid var(--text-outline);
+  }
+
+  .palette-input {
+    flex: 1;
     border: none;
-    border-bottom: 1px solid var(--bg-surface0);
     background: transparent;
     color: var(--text-primary);
     font-size: 15px;
     outline: none;
+    font-family: var(--font-body);
   }
 
   .palette-input::placeholder {
@@ -125,8 +118,8 @@
 
   .palette-list {
     overflow-y: auto;
-    max-height: 320px;
-    padding: 4px 0;
+    max-height: 340px;
+    padding: 4px;
   }
 
   .palette-item {
@@ -134,28 +127,34 @@
     justify-content: space-between;
     align-items: center;
     width: 100%;
-    padding: 8px 18px;
+    padding: 10px 14px;
     border: none;
+    border-radius: 6px;
     background: none;
     color: var(--text-primary);
     font-size: 13px;
     text-align: left;
     cursor: pointer;
+    transition: background 0.1s;
   }
 
   .palette-item:hover,
   .palette-item.selected {
-    background: var(--bg-surface0);
+    background: var(--bg-container-high);
   }
 
   .shortcut {
     color: var(--text-muted);
     font-size: 11px;
-    font-family: 'SF Mono', Monaco, monospace;
+    font-family: var(--font-mono);
+    padding: 2px 6px;
+    background: var(--bg-container-highest);
+    border-radius: 4px;
+    border: 1px solid var(--text-outline);
   }
 
   .no-results {
-    padding: 16px 18px;
+    padding: 24px 18px;
     color: var(--text-muted);
     font-size: 13px;
     text-align: center;

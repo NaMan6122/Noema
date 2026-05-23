@@ -10,16 +10,10 @@
 
   function handleDragStart(e: DragEvent, id: string) {
     dragTabId = id;
-    if (e.dataTransfer) {
-      e.dataTransfer.effectAllowed = 'move';
-      e.dataTransfer.setData('text/plain', id);
-    }
+    if (e.dataTransfer) { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', id); }
   }
 
-  function handleDragOver(e: DragEvent, id: string) {
-    e.preventDefault();
-    dragOverTabId = id;
-  }
+  function handleDragOver(e: DragEvent, id: string) { e.preventDefault(); dragOverTabId = id; }
 
   function handleDrop(e: DragEvent, targetId: string) {
     e.preventDefault();
@@ -33,14 +27,10 @@
         tabs = reordered;
       }
     }
-    dragTabId = null;
-    dragOverTabId = null;
+    dragTabId = null; dragOverTabId = null;
   }
 
-  function handleDragEnd() {
-    dragTabId = null;
-    dragOverTabId = null;
-  }
+  function handleDragEnd() { dragTabId = null; dragOverTabId = null; }
 </script>
 
 <div class="tab-bar">
@@ -63,55 +53,60 @@
           class="tab-close"
           on:click|stopPropagation={() => onClose(tab.id)}
           title="Close tab"
-        >×</button>
+        >
+          <span class="material-symbols-outlined" style="font-size: 14px;">close</span>
+        </button>
       {/if}
     </div>
   {/each}
-  <button class="tab-new" on:click={onNew} title="New tab (Cmd+T)">+</button>
+  <button class="tab-new" on:click={onNew} title="New tab (⌘T)">
+    <span class="material-symbols-outlined" style="font-size: 16px;">add</span>
+  </button>
 </div>
 
 <style>
   .tab-bar {
     display: flex;
     align-items: stretch;
-    background: var(--bg-crust);
-    border-bottom: 1px solid var(--bg-surface0);
+    background: var(--bg-surface);
+    border-bottom: 1px solid var(--text-outline);
     overflow-x: auto;
-    min-height: 32px;
-    gap: 1px;
-    padding: 0 4px;
+    min-height: 36px;
+    gap: 0;
+    padding: 0;
+    flex-shrink: 0;
   }
 
   .tab {
     display: flex;
     align-items: center;
     gap: 6px;
-    padding: 4px 12px;
-    background: var(--bg-mantle);
-    color: var(--text-muted);
+    padding: 0 16px;
+    background: transparent;
+    color: var(--text-secondary);
     font-size: 12px;
+    font-weight: 500;
     cursor: pointer;
-    border-radius: 6px 6px 0 0;
-    margin-top: 4px;
     min-width: 80px;
     max-width: 200px;
     user-select: none;
-    transition: background 0.1s;
+    transition: color 0.15s;
+    border-bottom: 2px solid transparent;
+    position: relative;
   }
 
   .tab:hover {
-    background: var(--bg-base);
-    color: var(--text-subtext);
+    color: var(--text-primary);
+    background: var(--bg-container);
   }
 
   .tab.active {
-    background: var(--bg-base);
-    color: var(--text-primary);
-    border-bottom: 2px solid var(--accent-blue);
+    color: var(--accent-primary);
+    border-bottom-color: var(--accent-primary);
   }
 
   .tab.drag-over {
-    background: var(--bg-surface0);
+    background: var(--bg-container-high);
   }
 
   .tab-title {
@@ -126,16 +121,17 @@
     background: none;
     color: var(--text-muted);
     cursor: pointer;
-    padding: 0 2px;
-    font-size: 14px;
-    line-height: 1;
-    border-radius: 3px;
+    padding: 2px;
+    border-radius: 4px;
     flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 
   .tab-close:hover {
-    background: var(--bg-surface1);
-    color: var(--accent-red);
+    background: var(--bg-container-high);
+    color: var(--accent-error);
   }
 
   .tab-new {
@@ -143,15 +139,13 @@
     background: none;
     color: var(--text-muted);
     cursor: pointer;
-    padding: 4px 10px;
-    font-size: 16px;
-    margin-top: 4px;
-    border-radius: 6px 6px 0 0;
+    padding: 0 12px;
     flex-shrink: 0;
+    display: flex;
+    align-items: center;
   }
 
   .tab-new:hover {
-    background: var(--bg-base);
     color: var(--text-primary);
   }
 </style>
