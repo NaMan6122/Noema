@@ -1,10 +1,10 @@
 # Agent Memory
 
 ## Active Task
-T-009 — Adopt instruction.md operating protocol
-State: IN_PROGRESS
-Started: 2026-05-23 14:00
-Last Updated: 2026-05-23 14:00
+T-010 — Add embedding engine and hybrid search (RRF fusion)
+State: DONE
+Started: 2026-05-23 14:30
+Last Updated: 2026-05-23 15:30
 
 ## Task Log
 
@@ -14,8 +14,21 @@ Last Updated: 2026-05-23 14:00
 **Checklist:**
   - [x] Restructure Memory.md
   - [x] Create dev-changelog.md with DCL-001 (embeddings deferral)
-  - [ ] Confirm active task and next step
-**Outcome:** PENDING
+  - [x] Confirm active task and next step
+**Outcome:** Complete. Protocol adopted, dev-changelog.md created.
+**Blockers:** NONE
+
+### [2026-05-23 14:30] — T-010: Add embedding engine and hybrid search (RRF fusion)
+**Goal:** Complete specs 03+04 by adding ONNX embedding engine, vector storage, and RRF-fused hybrid search
+**Approach:** ort v2 + tokenizers for BGE-small inference, blob storage in SQLite, brute-force cosine KNN, RRF fusion (k=60) in SearchEngine
+**Checklist:**
+  - [x] EmbeddingEngine: ONNX model load, tokenize, mean-pool, normalize
+  - [x] Blob column in chunks table for vector storage
+  - [x] Pipeline: embed chunks in batches when embedder available
+  - [x] Hybrid search: vector KNN + FTS5 BM25 + RRF merge
+  - [x] Graceful degradation: FTS-only when model not present
+  - [x] App wiring: load model from data_dir/models/bge-small
+**Outcome:** Complete. Workspace builds clean, 13 tests pass. Embedding engine loaded on startup if model files present; otherwise FTS-only mode. Hybrid search uses RRF to merge vector + keyword results.
 **Blockers:** NONE
 
 ### [2026-05-23 12:00] — T-008: Implement full-text search (Week 8)
