@@ -111,6 +111,17 @@
 
 **Completed:** 2026-05-23
 
+#### Week 8: Full-Text Search — DONE
+- [x] 8.1 QueryParser with filter extraction (type:, after:, size:, has:tag:, in:, exact phrases)
+- [x] 8.2 SearchEngine: FTS5 full-text search with BM25 ranking
+- [x] 8.3 Snippet extraction with term highlighting
+- [x] 8.4 Filter-only and recent-files fallback modes
+- [x] 8.5 Duplicate detection (hash-based grouping)
+- [x] 8.6 IPC: content_search, find_duplicates commands
+- [x] 8.7 GlobalSearch dual-mode UI (Tab toggles Files ↔ Content)
+
+**Completed:** 2026-05-23
+
 ### Current Branch
 `main` — All features merged
 
