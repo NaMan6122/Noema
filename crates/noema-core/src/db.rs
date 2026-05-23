@@ -165,6 +165,30 @@ impl Database {
                 accessed_at TEXT NOT NULL
             );
             CREATE INDEX IF NOT EXISTS idx_recent_accessed ON recent_paths(accessed_at);
+
+            CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
+                content,
+                heading,
+                content=chunks,
+                content_rowid=id
+            );
+
+            CREATE TRIGGER IF NOT EXISTS chunks_ai AFTER INSERT ON chunks BEGIN
+                INSERT INTO chunks_fts(rowid, content, heading)
+                VALUES (new.id, new.content, new.heading);
+            END;
+
+            CREATE TRIGGER IF NOT EXISTS chunks_ad AFTER DELETE ON chunks BEGIN
+                INSERT INTO chunks_fts(chunks_fts, rowid, content, heading)
+                VALUES ('delete', old.id, old.content, old.heading);
+            END;
+
+            CREATE TRIGGER IF NOT EXISTS chunks_au AFTER UPDATE ON chunks BEGIN
+                INSERT INTO chunks_fts(chunks_fts, rowid, content, heading)
+                VALUES ('delete', old.id, old.content, old.heading);
+                INSERT INTO chunks_fts(rowid, content, heading)
+                VALUES (new.id, new.content, new.heading);
+            END;
         ")?;
         Ok(())
     }

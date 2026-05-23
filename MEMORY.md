@@ -87,12 +87,40 @@
 | 2026-05-22 | 2a43610 | Add theme support with CSS custom properties |
 | 2026-05-22 | 8106a9b | Add terminal integration and disk space status bar |
 | 2026-05-23 | — | Theme system: dark/light/system with M3 Fidelity tokens |
+| 2026-05-23 | — | Implement indexing pipeline: parsers, chunker, FTS5, background queue |
 
 ### Architecture Decisions
 - All-Rust backend, Tauri shell, Svelte frontend
 - Spec-driven development: specs are source of truth, code satisfies specs
 - 7 spec files: overview, core, fs, index, search, ai, app_ipc
 - 6 crates: noema-core, noema-fs, noema-index, noema-search, noema-ai, noema-app
+- **Embeddings deferred:** ONNX/BGE-small embedding engine deferred from initial index implementation. Pipeline stores chunks + FTS5 for keyword search. Embeddings will be added as follow-up to enable semantic/vector search.
+
+### Phase 2: Indexing & Search (Weeks 7–10)
+
+#### Week 7: Indexing Pipeline — IN PROGRESS
+- [x] 7.1 FTS5 virtual table + sync triggers in migrations
+- [x] 7.2 MarkdownParser (pulldown-cmark) + PlainTextParser (fallback)
+- [x] 7.3 SemanticChunker with section-aware splitting + overlap
+- [x] 7.4 IndexerPipeline: priority queues, blake3 dedup, throttling
+- [x] 7.5 DB helpers (upsert_file_record, insert_chunks, etc.)
+- [x] 7.6 IPC commands: index_directory, get_index_status, pause/resume
+- [x] 7.7 Event forwarding: index:progress, index:complete
+- [x] 7.8 File watcher → auto-enqueue on fs changes
+- [x] 7.9 Frontend: index status indicator in status bar
+
+**Completed:** 2026-05-23
+
+#### Week 8: Full-Text Search — DONE
+- [x] 8.1 QueryParser with filter extraction (type:, after:, size:, has:tag:, in:, exact phrases)
+- [x] 8.2 SearchEngine: FTS5 full-text search with BM25 ranking
+- [x] 8.3 Snippet extraction with term highlighting
+- [x] 8.4 Filter-only and recent-files fallback modes
+- [x] 8.5 Duplicate detection (hash-based grouping)
+- [x] 8.6 IPC: content_search, find_duplicates commands
+- [x] 8.7 GlobalSearch dual-mode UI (Tab toggles Files ↔ Content)
+
+**Completed:** 2026-05-23
 
 ### Current Branch
 `main` — All features merged

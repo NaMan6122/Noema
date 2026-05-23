@@ -10,6 +10,10 @@ use noema_core::types::{FileEntry, SortDirection, SortField, SortOrder};
 use noema_fs::highlight::Highlighter;
 use noema_fs::ops::FileOpsEngine;
 use noema_fs::thumbs::ThumbnailService;
+use noema_index::parser::ParserRegistry;
+use noema_index::pipeline::{IndexJob, IndexReason, IndexState, IndexerPipeline, Priority};
+use noema_search::engine::SearchEngine;
+use noema_search::query::QueryParser;
 use serde::Serialize;
 use tauri::{Emitter, State};
 
@@ -19,6 +23,8 @@ struct AppState {
     highlighter: Arc<Highlighter>,
     event_bus: Arc<EventBus>,
     db: Arc<Database>,
+    indexer: Arc<IndexerPipeline>,
+    search_engine: Arc<SearchEngine>,
 }
 
 #[derive(Serialize)]
@@ -567,6 +573,83 @@ async fn get_favorites() -> Result<Vec<FavoriteEntry>, String> {
     Ok(favorites)
 }
 
+#[tauri::command]
+async fn index_directory(path: String, state: State<'_, AppState>) -> Result<String, String> {
+    let dir_path = PathBuf::from(&path);
+    if !dir_path.is_dir() {
+        return Err("Path is not a directory".to_string());
+    }
+
+    let mut jobs = Vec::new();
+    for entry in walkdir::WalkDir::new(&dir_path)
+        .follow_links(false)
+        .into_iter()
+        .filter_map(|e| e.ok())
+    {
+        if entry.file_type().is_file() {
+            jobs.push(IndexJob {
+                path: entry.into_path(),
+                priority: Priority::Normal,
+                reason: IndexReason::Manual,
+            });
+        }
+    }
+
+    let count = jobs.len();
+    state.indexer.enqueue_batch(jobs);
+    state.indexer.start().await;
+
+    Ok(format!("Enqueued {} files for indexing", count))
+}
+
+#[tauri::command]
+async fn get_index_status(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+    let status = state.indexer.status().await;
+    Ok(serde_json::json!({
+        "state": format!("{:?}", status.state),
+        "totalFiles": status.total_files,
+        "indexedFiles": status.indexed_files,
+        "pendingJobs": status.pending_jobs,
+        "currentFile": status.current_file,
+    }))
+}
+
+#[tauri::command]
+async fn pause_indexing(state: State<'_, AppState>) -> Result<(), String> {
+    state.indexer.pause();
+    Ok(())
+}
+
+#[tauri::command]
+async fn resume_indexing(state: State<'_, AppState>) -> Result<(), String> {
+    state.indexer.resume();
+    Ok(())
+}
+
+#[tauri::command]
+async fn content_search(
+    query: String,
+    limit: Option<usize>,
+    offset: Option<usize>,
+    state: State<'_, AppState>,
+) -> Result<serde_json::Value, String> {
+    let parsed = QueryParser.parse(&query);
+    let results = state.search_engine.search(&parsed, limit.unwrap_or(20), offset.unwrap_or(0))
+        .map_err(|e| e.to_string())?;
+
+    Ok(serde_json::json!({
+        "results": results.results,
+        "totalEstimate": results.total_estimate,
+        "tookMs": results.took_ms,
+    }))
+}
+
+#[tauri::command]
+async fn find_duplicates(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+    let groups = state.search_engine.find_duplicates().map_err(|e| e.to_string())?;
+    Ok(serde_json::json!(groups))
+}
+
 fn main() {
     tracing_subscriber::fmt::init();
 
@@ -585,12 +668,62 @@ fn main() {
     );
     let highlighter = Arc::new(Highlighter::new());
 
+    let parser_registry = Arc::new(ParserRegistry::with_defaults());
+    let indexer = Arc::new(IndexerPipeline::new(
+        parser_registry,
+        db.clone(),
+        event_bus.clone(),
+        100, // max_file_size_mb
+    ));
+
+    let search_engine = Arc::new(SearchEngine::new(db.clone()));
+
+    let indexer_for_watcher = indexer.clone();
+    let mut watcher_rx = event_bus.subscribe();
+    tauri::async_runtime::spawn(async move {
+        while let Ok(event) = watcher_rx.recv().await {
+            match event {
+                AppEvent::FileChanged { path, change } => {
+                    use noema_core::events::ChangeType;
+                    match change {
+                        ChangeType::Created | ChangeType::Modified => {
+                            if path.is_file() {
+                                indexer_for_watcher.enqueue(IndexJob {
+                                    path,
+                                    priority: Priority::Normal,
+                                    reason: IndexReason::NewFile,
+                                });
+                                indexer_for_watcher.start().await;
+                            }
+                        }
+                        ChangeType::Deleted => {
+                            let _ = noema_index::db::remove_file_record(
+                                &indexer_for_watcher.db(),
+                                &path,
+                            );
+                        }
+                        ChangeType::Renamed { from } => {
+                            let _ = noema_index::db::update_file_path(
+                                &indexer_for_watcher.db(),
+                                &from,
+                                &path,
+                            );
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+    });
+
     let app_state = AppState {
         fs_engine,
         thumb_service,
         highlighter,
         event_bus: event_bus.clone(),
         db,
+        indexer,
+        search_engine,
     };
 
     tauri::Builder::default()
@@ -625,6 +758,16 @@ fn main() {
                         AppEvent::FileChanged { .. } => {
                             let _ = handle.emit("fs:changed", ());
                         }
+                        AppEvent::IndexProgress { total, processed, current_file } => {
+                            let _ = handle.emit("index:progress", serde_json::json!({
+                                "total": total,
+                                "processed": processed,
+                                "currentFile": current_file,
+                            }));
+                        }
+                        AppEvent::IndexComplete => {
+                            let _ = handle.emit("index:complete", ());
+                        }
                         _ => {}
                     }
                 }
@@ -657,6 +800,12 @@ fn main() {
             get_disk_space,
             get_theme,
             set_theme,
+            index_directory,
+            get_index_status,
+            pause_indexing,
+            resume_indexing,
+            content_search,
+            find_duplicates,
         ])
         .run(tauri::generate_context!())
         .expect("error running Noema");
